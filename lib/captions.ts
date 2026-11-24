@@ -79,6 +79,7 @@ async function persistDrafts(input: {
   tokensOut: number;
 }): Promise<Caption[]> {
   const database = await readyDb();
+  const savedAt = new Date().toISOString();
   const statements = input.drafts.map((draft) =>
     database
       .prepare(
@@ -93,6 +94,7 @@ async function persistDrafts(input: {
            model = excluded.model,
            tokens_in = excluded.tokens_in,
            tokens_out = excluded.tokens_out,
+           created_at = excluded.created_at,
            status = CASE WHEN captions.status = 'posted' THEN 'posted' ELSE 'ready' END`,
       )
       .bind(
@@ -109,7 +111,7 @@ async function persistDrafts(input: {
         input.model,
         input.tokensIn,
         input.tokensOut,
-        new Date().toISOString(),
+        savedAt,
       ),
   );
   await database.batch(statements);
@@ -336,24 +338,43 @@ export async function ensureProductCaptions(
   const database = await readyDb();
   const date = dhakaDate();
 
-  if (!options.force) {
-    const existing = await database
-      .prepare("SELECT * FROM captions WHERE page_id = ? AND product_id = ? AND run_date = ?")
-      .bind(page.id, product.id, date)
-      .all<Row>();
+  // Always check existing saved captions for this product (across dates) so generated captions persist permanently
+  // and so force-regeneration knows every previous draft to avoid repeating text!
+  const { results: previousRows } = await database
+    .prepare("SELECT * FROM captions WHERE page_id = ? AND product_id = ? ORDER BY created_at DESC, run_date DESC LIMIT 12")
+    .bind(page.id, product.id)
+    .all<Row>();
+  const previousCaptions = (previousRows ?? []).map(mapCaption);
 
-    if ((existing.results ?? []).length >= 3) {
-      return (existing.results ?? []).map(mapCaption);
+  if (!options.force) {
+    const latestByType = new Map<CaptionType, Caption>();
+    for (const item of previousCaptions) {
+      if (!latestByType.has(item.type)) latestByType.set(item.type, item);
+    }
+    if (latestByType.size >= 3) {
+      return (["image", "video", "problem"] as CaptionType[]).map((t) => latestByType.get(t)!);
     }
   }
 
   const started = Date.now();
+  const pageRecent = await recentBodies(page.id, 6);
+  const productPreviousBodies = previousCaptions.map((c) => c.body).filter(Boolean);
+  const avoid = Array.from(new Set([...productPreviousBodies, ...pageRecent])).slice(0, 12);
+  const regenNonce = options.force ? `variation-${Date.now().toString(36)}` : undefined;
+  const regenInstruction =
+    options.force && productPreviousBodies.length > 0
+      ? "আগের সব ক্যাপশনের চেয়ে একদম ভিন্ন ও নতুন হুক, ভিন্ন বাক্য গঠন এবং ভিন্ন দৃষ্টিভঙ্গিতে লেখো। আগের কোনো লাইন বা প্রথম বাক্য হুবহু পুনরাবৃত্তি করবে না।"
+      : undefined;
+
   const outcome = await generateCaptionDrafts({
     page,
     product,
-    avoid: await recentBodies(page.id),
+    avoid,
     apiKey: apiKey(),
     model: modelName(),
+    instruction: regenInstruction,
+    variationSeed: regenNonce,
+    temperature: options.force ? 0.96 : 0.88,
   });
 
   const captions = await persistDrafts({
@@ -401,20 +422,25 @@ export async function regenerateOne(caption: Caption, instruction?: string): Pro
   const outcome = await generateCaptionDrafts({
     page,
     product,
-    avoid: [...(await recentBodies(page.id, 12)), caption.body],
+    avoid: Array.from(new Set([caption.body, ...(await recentBodies(page.id, 10))])).slice(0, 12),
     apiKey: apiKey(),
     model: modelName(),
-    instruction,
+    instruction:
+      instruction ??
+      "আগের ক্যাপশনের চেয়ে সম্পূর্ণ নতুন হুক, নতুন শব্দচয়ন ও নতুন অ্যাঙ্গেলে লেখো। আগের কোনো বাক্য হুবহু কপি করবে না।",
     type: caption.type,
+    variationSeed: `regen-${Date.now().toString(36)}`,
+    temperature: 0.96,
   });
 
   const draft = outcome.drafts.find((item) => item.type === caption.type) ?? outcome.drafts[0];
   const meta: CaptionMeta = { ...draft.meta, poster: draft.meta.poster };
+  const updatedAt = new Date().toISOString();
 
   await database
     .prepare(
       `UPDATE captions SET body = ?, hashtags_json = ?, meta_json = ?, model = ?, tokens_in = ?, tokens_out = ?,
-       status = CASE WHEN status = 'posted' THEN 'posted' ELSE 'ready' END WHERE id = ?`,
+       created_at = ?, status = CASE WHEN status = 'posted' THEN 'posted' ELSE 'ready' END WHERE id = ?`,
     )
     .bind(
       draft.body,
@@ -423,6 +449,7 @@ export async function regenerateOne(caption: Caption, instruction?: string): Pro
       outcome.model,
       outcome.tokensIn,
       outcome.tokensOut,
+      updatedAt,
       caption.id,
     )
     .run();

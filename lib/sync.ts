@@ -69,13 +69,29 @@ export function mapUniStoreProduct(item: UniStoreProduct, pageId: string) {
   const features = highlights.map((highlight) => splitHighlight(highlight).text || highlight);
   const featureLabels = highlights.map((highlight) => splitHighlight(highlight).label).filter(Boolean);
   const discount = item.discountAmount ?? 0;
-  const enrich: ProductEnrich & { orderUrl?: string; whatsapp?: string; warranty?: string } = {
+  const galleryUrls: string[] = [];
+  const pushImg = (url?: string | null) => {
+    if (typeof url === "string" && url.startsWith("https://")) {
+      const clean = url.trim();
+      if (clean && !galleryUrls.includes(clean)) galleryUrls.push(clean);
+    }
+  };
+  pushImg(item.primaryImage);
+  for (const img of item.images ?? []) {
+    if (img?.isPrimary) pushImg(img.url);
+  }
+  for (const img of item.images ?? []) {
+    pushImg(img?.url);
+  }
+
+  const enrich: ProductEnrich = {
     nameEn: name,
     keyword: "",
     featureLabels,
     orderUrl: item.orderLinks?.productPage,
     whatsapp: item.orderLinks?.hotline ?? undefined,
     warranty: item.deliveryInfo?.warranty ?? undefined,
+    images: galleryUrls,
   };
   const keywordCandidate = name.match(/[A-Za-z][A-Za-z0-9-]{3,}/g) ?? [];
   const stop = new Set([
@@ -107,11 +123,7 @@ export function mapUniStoreProduct(item: UniStoreProduct, pageId: string) {
     material: null,
     targetAudience: null,
     tags: [item.category?.name?.trim() ?? "অন্যান্য"],
-    imageUrl:
-      item.primaryImage ??
-      item.images?.find((image) => image.isPrimary)?.url ??
-      item.images?.[0]?.url ??
-      null,
+    imageUrl: galleryUrls[0] ?? null,
     artSeed: item.slug || item.id,
     enrich,
     isActive: 1,
@@ -231,9 +243,9 @@ export async function syncUniStoreCatalog(options: {
 
     const db = await readyDb();
     const existing = await db
-      .prepare("SELECT id, source_id, source_updated_at, is_active FROM products WHERE page_id = ?")
+      .prepare("SELECT id, source_id, source_updated_at, is_active, enrich_json FROM products WHERE page_id = ?")
       .bind(options.pageId)
-      .all<{ id: string; source_id: string; source_updated_at: string | null; is_active: number }>();
+      .all<{ id: string; source_id: string; source_updated_at: string | null; is_active: number; enrich_json: string | null }>();
     const bySource = new Map((existing.results ?? []).map((row) => [row.source_id, row]));
 
     const incomingIds = new Set<string>();
@@ -249,8 +261,16 @@ export async function syncUniStoreCatalog(options: {
       incomingIds.add(mapped.sourceId);
       const current = bySource.get(mapped.sourceId);
       const updatedAt = mapped.sourceUpdatedAt ?? now;
+      const needsGalleryBackfill =
+        Boolean(mapped.enrich.images?.length) && (!current?.enrich_json || !current.enrich_json.includes('"images"'));
 
-      if (current && current.is_active === 1 && current.source_updated_at && current.source_updated_at >= updatedAt) {
+      if (
+        current &&
+        current.is_active === 1 &&
+        !needsGalleryBackfill &&
+        current.source_updated_at &&
+        current.source_updated_at >= updatedAt
+      ) {
         skipped++;
         continue;
       }

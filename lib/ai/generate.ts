@@ -30,6 +30,8 @@ export interface GenerateInput {
   model?: string;
   instruction?: string;
   type?: CaptionType;
+  variationSeed?: string;
+  temperature?: number;
 }
 
 const ANGLES: Angle[] = ["benefit", "emotional", "urgency"];
@@ -154,8 +156,8 @@ export async function generateCaptionDrafts(input: GenerateInput): Promise<Gener
     page,
     product,
     type: input.type ?? "image",
-    angle: angleFor(product.id),
-    avoid: input.avoid?.slice(0, 8) ?? [],
+    angle: angleFor(input.variationSeed ? `${product.id}:${input.variationSeed}` : product.id),
+    avoid: input.avoid?.slice(0, 10) ?? [],
   });
 
   const user = input.instruction
@@ -168,6 +170,7 @@ export async function generateCaptionDrafts(input: GenerateInput): Promise<Gener
       system: prompt.system,
       user,
       schema: prompt.responseSchema,
+      temperature: input.temperature ?? 0.88,
     },
     input.model ?? DEFAULT_GEMINI_MODEL,
   );
@@ -179,9 +182,10 @@ export async function generateCaptionDrafts(input: GenerateInput): Promise<Gener
   const issues: string[] = [];
 
   const keyword = asText(json.comment_keyword, commentKeyword(product));
+  const videoParts = [asText(video.hook), asText(video.body), asText(video.cta)].filter(Boolean);
   const raw: Record<CaptionType, string> = {
     image: asText(json.image_caption),
-    video: [asText(video.hook), asText(video.body), asText(video.cta)].filter(Boolean).join("\n"),
+    video: videoParts.join("\n\n"),
     problem: asText(json.problem_caption),
   };
 

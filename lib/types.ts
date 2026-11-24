@@ -36,6 +36,7 @@ export interface ProductEnrich {
   orderUrl?: string;
   whatsapp?: string;
   warranty?: string;
+  images?: string[];
 }
 
 export interface Product {

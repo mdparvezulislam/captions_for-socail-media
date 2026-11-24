@@ -364,26 +364,34 @@ export interface TaskProduct {
   recent: boolean;
 }
 
-/** Full catalogue with caption status + selection score — the moderator task grid. */
+/** Full catalogue with persistent caption status + selection score — the moderator task grid. */
 export async function listTaskProducts(pageId: string, date: string): Promise<TaskProduct[]> {
   const db = await readyDb();
-  const productResponse = await db
-    .prepare("SELECT * FROM products WHERE page_id = ? AND is_active = 1")
-    .bind(pageId)
-    .all<Row>();
-  const todayResponse = await db
-    .prepare("SELECT product_id, type FROM captions WHERE page_id = ? AND run_date = ?")
-    .bind(pageId, date)
-    .all<{ product_id: string; type: string }>();
-  const lastResponse = await db
-    .prepare("SELECT product_id, MAX(run_date) AS last_date FROM captions WHERE page_id = ? GROUP BY product_id")
-    .bind(pageId)
-    .all<{ product_id: string; last_date: string }>();
+  const [productResponse, savedResponse, lastResponse] = await Promise.all([
+    db
+      .prepare("SELECT * FROM products WHERE page_id = ? AND is_active = 1")
+      .bind(pageId)
+      .all<Row>(),
+    // Always load saved caption types across dates so generated captions never vanish after midnight or across devices.
+    db
+      .prepare("SELECT DISTINCT product_id, type FROM captions WHERE page_id = ?")
+      .bind(pageId)
+      .all<{ product_id: string; type: string }>(),
+    db
+      .prepare("SELECT product_id, MAX(run_date) AS last_date FROM captions WHERE page_id = ? GROUP BY product_id")
+      .bind(pageId)
+      .all<{ product_id: string; last_date: string }>(),
+  ]);
 
   const typesByProduct = new Map<string, CaptionType[]>();
-  for (const row of todayResponse.results ?? []) {
+  for (const row of savedResponse.results ?? []) {
     const list = typesByProduct.get(row.product_id) ?? [];
-    if (row.type === "image" || row.type === "video" || row.type === "problem") list.push(row.type);
+    if (
+      (row.type === "image" || row.type === "video" || row.type === "problem") &&
+      !list.includes(row.type)
+    ) {
+      list.push(row.type);
+    }
     typesByProduct.set(row.product_id, list);
   }
   const lastUsed = new Map<string, string>();
@@ -398,11 +406,12 @@ export async function listTaskProducts(pageId: string, date: string): Promise<Ta
     const recent = lastUsedDate
       ? (new Date(`${date}T00:00:00Z`).getTime() - new Date(`${lastUsedDate}T00:00:00Z`).getTime()) / 864e5 <= 7
       : false;
+    const savedTypes = typesByProduct.get(product.id) ?? [];
     return {
       product,
       percent: Math.round(scored.score * 100),
-      hasCaptionsToday: typesByProduct.has(product.id),
-      types: typesByProduct.get(product.id) ?? [],
+      hasCaptionsToday: savedTypes.length > 0,
+      types: savedTypes,
       lastUsedDate,
       recent,
     };
@@ -429,7 +438,11 @@ export interface StudioData {
   lastUsedDate: string | null;
 }
 
-/** Everything the instant caption studio drawer needs, in one read. */
+/**
+ * Everything the instant caption studio drawer needs, in one read.
+ * Always returns the latest saved caption per type (image, video, problem) from D1
+ * so generated captions persist across midnight, page reloads, and other devices.
+ */
 export async function getStudioData(productId: string, date: string): Promise<StudioData | null> {
   const product = await getProduct(productId);
   if (!product) return null;
@@ -440,13 +453,21 @@ export async function getStudioData(productId: string, date: string): Promise<St
       const db = await readyDb();
       const { results } = await db
         .prepare(
-          `SELECT * FROM captions WHERE product_id = ? AND run_date = ?
-           ORDER BY batch DESC, position ASC,
-           CASE type WHEN 'image' THEN 1 WHEN 'video' THEN 2 ELSE 3 END ASC`,
+          `SELECT * FROM captions WHERE product_id = ?
+           ORDER BY created_at DESC, run_date DESC, batch DESC`,
         )
-        .bind(productId, date)
+        .bind(productId)
         .all<Row>();
-      return (results ?? []).map(mapCaption);
+      const latestByType = new Map<CaptionType, Caption>();
+      for (const row of results ?? []) {
+        const mapped = mapCaption(row);
+        if (!latestByType.has(mapped.type)) {
+          latestByType.set(mapped.type, mapped);
+        }
+      }
+      return (["image", "video", "problem"] as CaptionType[])
+        .map((type) => latestByType.get(type))
+        .filter((item): item is Caption => Boolean(item));
     })(),
   ]);
   if (!page) return null;

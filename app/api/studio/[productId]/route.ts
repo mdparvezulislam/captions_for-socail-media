@@ -9,5 +9,8 @@ export async function GET(_request: Request, context: { params: Promise<{ produc
   if (!data) {
     return Response.json({ ok: false, error: "not found" }, { status: 404 });
   }
-  return Response.json({ ok: true, ...data });
+  return Response.json(
+    { ok: true, ...data },
+    { headers: { "cache-control": "no-store, no-cache, must-revalidate" } },
+  );
 }

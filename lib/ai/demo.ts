@@ -67,12 +67,14 @@ export function demoCaption(product: Product, page: Page, type: CaptionType): { 
   if (type === "video") {
     const hook = pick(SHORT_HOOKS, seed);
     const body = [
-      `${hook} আজই নিয়ে নিন ${nameEn}।`,
-      "",
-      `✅ ${product.features[0] ?? product.solutionBn}।`,
+      hook,
+      `প্রতিদিনের এই ঝামেলার স্মার্ট সমাধান ${nameEn} — ${product.solutionBn}।`,
+      bulletLines(product, 2) || `✅ ${product.features[0] ?? product.solutionBn}`,
       "",
       cta,
-    ].join("\n");
+    ]
+      .filter((line, idx, arr) => !(line === "" && arr[idx - 1] === ""))
+      .join("\n");
     return { body, meta: { hook, cta, angle: "video", source: "demo" } };
   }
 

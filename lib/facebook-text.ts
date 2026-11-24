@@ -118,6 +118,29 @@ export function imageSrcFor(product: { imageUrl?: string | null; artSeed?: strin
   return `/api/art/${encodeURIComponent(product.artSeed || product.id || "art")}`;
 }
 
+/** প্রোডাক্টের সব গ্যালারি ইমেজ (same-origin proxy URL) — প্রাইমারি ছবি আগে, ডুপ্লিকেট বাদ। */
+export function productGallerySources(product: {
+  imageUrl?: string | null;
+  artSeed?: string;
+  id?: string;
+  enrich?: { images?: string[] } | null;
+}): string[] {
+  const raw: string[] = [];
+  if (product.imageUrl && product.imageUrl.startsWith("https://")) {
+    raw.push(product.imageUrl.trim());
+  }
+  for (const url of product.enrich?.images ?? []) {
+    if (typeof url === "string" && url.startsWith("https://")) {
+      const clean = url.trim();
+      if (clean && !raw.includes(clean)) raw.push(clean);
+    }
+  }
+  if (raw.length === 0) {
+    return [imageSrcFor(product)];
+  }
+  return raw.map((url) => `/api/image?url=${encodeURIComponent(url)}`);
+}
+
 export interface GroupBlockInput {
   orderUrl?: string | null;
   whatsapp?: string | null;

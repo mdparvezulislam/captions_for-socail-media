@@ -18,9 +18,9 @@ export interface ValidationResult {
 }
 
 const WORD_RANGE: Record<CaptionType, [number, number]> = {
-  image: [35, 85],
-  video: [12, 60],
-  problem: [45, 120],
+  image: [35, 95],
+  video: [18, 85],
+  problem: [40, 120],
 };
 
 const BANNED = /১০০\s*%\s*গ্যারান্টি|রোগ\s*(সারায়|সারে|মুক্ত)|ডাক্তার|ঔষধ|সরকারি\s*(অনুমোদিত|প্রকল্প)|ক্যান্সার|ডায়াবেটিস\s*(সারায়|নিরাময়)/;

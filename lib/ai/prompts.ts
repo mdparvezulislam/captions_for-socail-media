@@ -26,11 +26,11 @@ const ANGLE_BRIEF: Record<Angle, string> = {
 
 const TYPE_BRIEF: Record<CaptionType, string> = {
   image:
-    "ছবির সাথে যাবে এমন ক্যাপশন: মোট ৪–৫টি ছোট লাইন, ৪০–৭০ শব্দ। লাইন ১ = স্ক্রল থামানো হুক। লাইন ২–৩ = ফিচার থেকে উপকার। শেষে দাম + অফার লাইন এবং CTA।",
+    "লম্বা ভার্সন (ফিড পোস্ট): কাঠামো — (১) ১–২ লাইনে গ্রাহকের বাস্তব সমস্যা/পরিস্থিতি, শেষে «এই ঝামেলা এড়াতে আমি এখন ব্যবহার করছি <English product name>।» (২) ফাঁকা লাইন (৩) ৩–৫টি বুলেট, প্রতিটি ফরম্যাট: «✅ <ছোট English Feature Label> - <বাংলায় সুবিধা>» (৪) ফাঁকা লাইন (৫) CTA লাইন (নিচের টেমপ্লেট)। দাম বডিতে লিখবে না।",
   video:
-    "ভিডিও/রিলসের ক্যাপশন: ঠিক ৩–৪টি লাইন। ১ম লাইন hook (৯০ অক্ষরের কম, শেষে 👇)। ২য় লাইন = একটাই সবচেয়ে বড় উপকার। ৩য় লাইন = দাম বা অফার। শেষ লাইন = CTA।",
+    "ছোট ভার্সন (রিলস/ভিডিও): কাঠামো — (১) প্রশ্ন দিয়ে শুরু হুক + «আজই নিয়ে নিন <English product name>।» (২) ফাঁকা লাইন (৩) একটিমাত্র বুলেট «✅ <সবচেয়ে বড় সুবিধা বাংলায়>।» (৪) ফাঁকা লাইন (৫) CTA লাইন।",
   problem:
-    "সমস্যা-সমাধান ক্যাপশন: ৪–৫ লাইন। গ্রাহকের ব্যথা (problemBn নিজের ভাষায় নতুন করে লিখবে, হুবহু কপি নয়) → সমাধান (solutionBn) → কেন এটাই আলাদা (ফিচার/মেটেরিয়াল) → দাম + অফার → CTA।",
+    "সমস্যা-সমাধান ভার্সন: কাঠামো — (১) সমস্যার কথা (problemBn নিজের ভাষায়, হুবহু কপি নয়) (২) ফাঁকা লাইন (৩) «সমাধান: <solutionBn> — <English product name>।» (৪) ফাঁকা লাইন (৫) ২–৩টি ✅ বুলেট (৬) ফাঁকা লাইন (৭) CTA লাইন।",
 };
 
 export const RESPONSE_SCHEMA: Record<string, unknown> = {
@@ -56,6 +56,11 @@ export const RESPONSE_SCHEMA: Record<string, unknown> = {
       description: "সমস্যা → সমাধান → কেন এটাই → দাম → CTA, ৪–৫ লাইন",
       maxLength: 900,
     },
+    comment_keyword: {
+      type: "STRING",
+      description: "কমেন্ট ট্রিগার কীওয়ার্ড — প্রোডাক্টের সহজ ইংরেজি শব্দ (যেমন Chopper, Fan)",
+      maxLength: 20,
+    },
     hashtags: {
       type: "ARRAY",
       description: "৫–৭টি হ্যাশট্যাগ, প্রতিটি # দিয়ে শুরু",
@@ -75,7 +80,7 @@ export const RESPONSE_SCHEMA: Record<string, unknown> = {
       propertyOrdering: ["headline", "subline", "badge", "cta"],
     },
   },
-  required: ["image_caption", "video_caption", "problem_caption", "hashtags", "poster"],
+  required: ["image_caption", "video_caption", "problem_caption", "comment_keyword", "hashtags", "poster"],
   propertyOrdering: ["image_caption", "video_caption", "problem_caption", "hashtags", "poster"],
 };
 
@@ -91,6 +96,9 @@ function productFacts(product: Product): string {
   return JSON.stringify(
     {
       নাম: product.nameBn,
+      ইংরেজি_নাম: product.enrich?.nameEn ?? null,
+      কমেন্ট_কীওয়ার্ড: product.enrich?.keyword ?? null,
+      ফিচার_লেবেল_ইংরেজি: product.enrich?.featureLabels ?? null,
       ক্যাটাগরি: product.category,
       দাম: taka(product.priceBdt),
       আগের_দাম: product.compareAtPriceBdt ? taka(product.compareAtPriceBdt) : null,
@@ -117,6 +125,8 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
 ১. ভাষা: স্বাভাবিক কথ্য বাংলা, প্রমিত বানান। হিন্দি শব্দ নয় ("করনা", "হ্যায়" নিষেধ)। যান্ত্রিক অনুবাদের গন্ধ থাকবে না।
 ২. ইংরেজি শব্দ শুধু যেখানে বাংলাদেশিরা সত্যিই বলে: অর্ডার, ডেলিভারি, কোয়ালিটি, স্টক, ক্যাশ অন ডেলিভারি, রিচার্জেবল।
 ৩. কোনো তথ্য বানিয়ে লিখবে না। দাম, ছাড়, ওয়ারেন্টি, ডেলিভারি সময়, স্টক — শুধু দেওয়া ডেটা থেকে। ডেটা না থাকলে উল্লেখ করবে না।
+৩ক. দাম ক্যাপশনের ভেতরে লিখবে না — দাম ইনবক্সে যায় (CTA টেমপ্লেট ব্যবহার করবে)।
+৩খ. ফিচার বুলেটের লেবেল ছোট ইংরেজিতে (যেমন Fast Chopping), ব্যাখ্যা বাংলায় — এতে পোস্ট প্রিমিয়াম দেখায়।
 ৪. চিকিৎসা-সংক্রান্ত দাবি নিষেধ। "১০০% গ্যারান্টি", "সরকারি", "রোগ সারায়", "ক্যান্সার", "ডায়াবেটিস" — এসব শব্দ বা দাবি কখনো লিখবে না।
 ৫. ইমোজি সর্বোচ্চ ৪–৫টি, ছড়িয়ে দেবে; লাইনের পর লাইনে ইমোজি নয়।
 ৬. হ্যাশট্যাগ ক্যাপশনের ভেতরে নয় — আলাদা তালিকায় দেবে।

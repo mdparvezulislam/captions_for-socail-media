@@ -37,6 +37,7 @@ export const SCHEMA_STATEMENTS: string[] = [
     tags_json TEXT NOT NULL DEFAULT '[]',
     image_url TEXT,
     art_seed TEXT NOT NULL DEFAULT '',
+    enrich_json TEXT,
     is_active INTEGER NOT NULL DEFAULT 1,
     source_updated_at TEXT,
     created_at TEXT NOT NULL,

@@ -5,6 +5,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { EmptyState } from "@/components/ui/empty";
 import { IconPoster, IconSearch } from "@/components/ui/icons";
 import { listCaptions, listPages } from "@/lib/data";
+import { captionCopyText } from "@/lib/facebook-text";
 import { bn, bnDate, excerpt } from "@/lib/format";
 import { CAPTION_TYPES, type CaptionStatus, type CaptionType } from "@/lib/types";
 import { cn } from "@/lib/cn";
@@ -156,7 +157,7 @@ export default async function LibraryPage({
                             <IconPoster size={14} />
                           </Link>
                           <CopyButton
-                            text={`${caption.body}\n\n${caption.hashtags.join(" ")}`}
+                            text={captionCopyText(caption.body, caption.hashtags)}
                             label="কপি"
                             variant="quiet"
                             className="h-8 px-2.5 text-[11.5px]"

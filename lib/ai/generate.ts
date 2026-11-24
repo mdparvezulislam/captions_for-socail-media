@@ -3,7 +3,7 @@ import { demoCaptionSet, demoPosterCopy } from "@/lib/ai/demo";
 import { buildPrompt, type Angle } from "@/lib/ai/prompts";
 import { callGemini, DEFAULT_GEMINI_MODEL, GeminiError } from "@/lib/ai/gemini";
 import { validateCaption } from "@/lib/ai/validate";
-import { taka } from "@/lib/format";
+import { commentKeyword } from "@/lib/ai/demo";
 
 export interface CaptionDraft {
   type: CaptionType;
@@ -147,6 +147,7 @@ export async function generateCaptionDrafts(input: GenerateInput): Promise<Gener
   const poster = posterFromDrafts(page, product, json.poster);
   const issues: string[] = [];
 
+  const keyword = asText(json.comment_keyword, commentKeyword(product));
   const raw: Record<CaptionType, string> = {
     image: asText(json.image_caption),
     video: [asText(video.hook), asText(video.body), asText(video.cta)].filter(Boolean).join("\n"),
@@ -160,6 +161,7 @@ export async function generateCaptionDrafts(input: GenerateInput): Promise<Gener
       ...demoDraft.meta,
       source: "gemini",
       poster,
+      keyword,
       hook: type === "video" ? asText(video.hook, demoDraft.meta.hook) : demoDraft.meta.hook,
       cta: asText(video.cta, page.ctaText),
     };
@@ -198,8 +200,4 @@ export async function generateCaptionDrafts(input: GenerateInput): Promise<Gener
     issues,
     latencyMs: Date.now() - started,
   };
-}
-
-export function priceLabel(product: Product): string {
-  return taka(product.priceBdt);
 }

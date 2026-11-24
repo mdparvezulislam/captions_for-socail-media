@@ -21,6 +21,7 @@ function product(overrides: Partial<Product>): Product {
     tags: ["টেস্ট"],
     imageUrl: null,
     artSeed: "seed",
+    enrich: null,
     isActive: true,
     sourceUpdatedAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),

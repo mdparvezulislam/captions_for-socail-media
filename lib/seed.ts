@@ -4,6 +4,9 @@ import type { BrandKit, Page, Product } from "@/lib/types";
 
 interface BaseProduct {
   key: string;
+  nameEn: string;
+  keyword: string;
+  featureLabels: string[];
   name: string;
   category: string;
   price: number;
@@ -21,6 +24,9 @@ interface BaseProduct {
 const BASE: BaseProduct[] = [
   {
     key: "mini-fan",
+    nameEn: "Rechargeable Mini Fan",
+    keyword: "Fan",
+    featureLabels: ["Rechargeable Battery", "USB-C Charging", "3 Speed Control", "Lightweight Design"],
     name: "রিচার্জেবল মিনি ফ্যান",
     category: "ফ্যান",
     price: 1290,
@@ -36,6 +42,9 @@ const BASE: BaseProduct[] = [
   },
   {
     key: "rice-cooker",
+    nameEn: "Electric Rice Cooker",
+    keyword: "Rice",
+    featureLabels: ["1.8L Capacity", "Non-Stick Pot", "Auto Keep-Warm", "Energy Saving"],
     name: "ইলেকট্রিক রাইস কুকার ১.৮ লিটার",
     category: "কিচেন",
     price: 2450,
@@ -51,6 +60,9 @@ const BASE: BaseProduct[] = [
   },
   {
     key: "blender",
+    nameEn: "Stainless Steel Blender",
+    keyword: "Blender",
+    featureLabels: ["600W Motor", "2 Jars", "Stainless Blades", "Overload Protection"],
     name: "স্টেইনলেস স্টিল ব্লেন্ডার (২ জার)",
     category: "কিচেন",
     price: 3150,
@@ -66,6 +78,9 @@ const BASE: BaseProduct[] = [
   },
   {
     key: "water-filter",
+    nameEn: "Water Filter Purifier",
+    keyword: "Water",
+    featureLabels: ["7-Stage Filtration", "12L Capacity", "RO + UV", "Easy Filter Change"],
     name: "৭ স্তরের ওয়াটার ফিল্টার",
     category: "হোম",
     price: 1890,
@@ -81,6 +96,9 @@ const BASE: BaseProduct[] = [
   },
   {
     key: "mosquito-killer",
+    nameEn: "Electric Mosquito Killer",
+    keyword: "Mosquito",
+    featureLabels: ["UV Light", "Silent Fan", "Chemical Free", "Low Power"],
     name: "ইলেকট্রিক মশা মারার লাইট",
     category: "হোম",
     price: 990,
@@ -96,6 +114,9 @@ const BASE: BaseProduct[] = [
   },
   {
     key: "smart-watch",
+    nameEn: "Smart Watch T900",
+    keyword: "Watch",
+    featureLabels: ["Bluetooth Calling", "Heart Rate + SpO2", "1.9 inch Display", "7 Days Battery"],
     name: "স্মার্ট ওয়াচ T900",
     category: "গ্যাজেট",
     price: 1650,
@@ -111,6 +132,9 @@ const BASE: BaseProduct[] = [
   },
   {
     key: "power-bank",
+    nameEn: "Power Bank 20000mAh",
+    keyword: "Power",
+    featureLabels: ["20000mAh", "22.5W Fast Charge", "Dual Output", "Digital Display"],
     name: "পাওয়ার ব্যাংক ২০০০০mAh",
     category: "গ্যাজেট",
     price: 1750,
@@ -126,6 +150,9 @@ const BASE: BaseProduct[] = [
   },
   {
     key: "hair-dryer",
+    nameEn: "Hair Dryer 2000W",
+    keyword: "Hair",
+    featureLabels: ["2000W Power", "2 Speed + 2 Heat", "Cool Shot", "Foldable Handle"],
     name: "হেয়ার ড্রায়ার ২০০০W",
     category: "বিউটি",
     price: 1150,
@@ -141,6 +168,9 @@ const BASE: BaseProduct[] = [
   },
   {
     key: "knife-set",
+    nameEn: "Kitchen Knife Set",
+    keyword: "Knife",
+    featureLabels: ["Stainless Blades", "Wooden Handle", "5 Pieces + Stand", "Rust Resistant"],
     name: "কিচেন নাইফ সেট (৫ পিস)",
     category: "কিচেন",
     price: 1450,
@@ -156,6 +186,9 @@ const BASE: BaseProduct[] = [
   },
   {
     key: "stroller",
+    nameEn: "Baby Stroller",
+    keyword: "Stroller",
+    featureLabels: ["One-Hand Fold", "5-Point Belt", "Shock-Absorbing Wheels", "Sunshade Canopy"],
     name: "বেবি স্ট্রলার (ফোল্ডেবল)",
     category: "বেবি",
     price: 5600,
@@ -301,6 +334,7 @@ export function buildProducts(): Product[] {
         tags: base.tags,
         imageUrl: null,
         artSeed: `${page.slug}-${base.key}`,
+        enrich: { nameEn: base.nameEn, keyword: base.keyword, featureLabels: base.featureLabels },
         isActive: true,
         sourceUpdatedAt: new Date(now.getTime() - productIndex * 36e5).toISOString(),
         createdAt: new Date(now.getTime() - (productIndex + 1) * 864e5).toISOString(),

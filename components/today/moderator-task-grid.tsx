@@ -55,6 +55,11 @@ export function ModeratorTaskGrid({
   const [pinnedIds] = useStoredIds(page.slug, "pinned");
   const [favoriteIds] = useStoredIds(page.slug, "favorite");
 
+  // Deep-link (?product=id) বারবার এলেও ড্রয়ার সিঙ্ক হয়
+  useEffect(() => {
+    if (initialProductId) setSelected(initialProductId);
+  }, [initialProductId]);
+
   const remainingCount = useMemo(() => tasks.filter((task) => !task.hasCaptionsToday).length, [tasks]);
   const recentCount = useMemo(() => tasks.filter((task) => task.recent).length, [tasks]);
 
@@ -193,6 +198,9 @@ export function ModeratorTaskGrid({
           productId={selected}
           onClose={() => {
             setSelected(null);
+            if (initialProductId) {
+              window.history.replaceState({}, "", `/today?page=${page.slug}`);
+            }
           }}
           onNavigate={(id) => setSelected(id)}
         />

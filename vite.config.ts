@@ -4,6 +4,11 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 import { imagesOptimizer } from "@vinext/cloudflare/images/images-optimizer";
 
 export default defineConfig({
+  server: {
+    watch: {
+      ignored: ["**/.cache/**", "**/.cloudflare/**", "**/.wrangler/**"],
+    },
+  },
   plugins: [
     vinext({
       images: { optimizer: imagesOptimizer() },

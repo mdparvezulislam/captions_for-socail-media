@@ -29,6 +29,12 @@ export interface Page {
   createdAt: string;
 }
 
+export interface ProductEnrich {
+  nameEn?: string;
+  keyword?: string;
+  featureLabels?: string[];
+}
+
 export interface Product {
   id: string;
   pageId: string;
@@ -47,6 +53,7 @@ export interface Product {
   tags: string[];
   imageUrl: string | null;
   artSeed: string;
+  enrich?: ProductEnrich | null;
   isActive: boolean;
   sourceUpdatedAt: string | null;
   createdAt: string;
@@ -62,6 +69,7 @@ export interface PosterCopy {
 export interface CaptionMeta {
   hook?: string;
   cta?: string;
+  keyword?: string;
   angle?: string;
   source?: "gemini" | "demo";
   poster?: PosterCopy;

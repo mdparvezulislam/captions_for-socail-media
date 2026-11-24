@@ -4,6 +4,7 @@ import { PosterStudio } from "@/components/poster/poster-studio";
 import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/ui/copy-button";
 import { getCaption, getPageById, getProduct } from "@/lib/data";
+import { captionCopyText } from "@/lib/facebook-text";
 import { bnRelative, discountPercent, taka } from "@/lib/format";
 import type { PosterCopy } from "@/lib/types";
 
@@ -79,7 +80,7 @@ export default async function PosterPage({ params }: { params: Promise<{ id: str
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[14px] font-[640]">এই পোস্টের ক্যাপশন</h2>
           <CopyButton
-            text={`${caption.body}\n\n${caption.hashtags.join(" ")}`}
+            text={captionCopyText(caption.body, caption.hashtags)}
             label="ক্যাপশন কপি"
             variant="quiet"
             className="h-9"

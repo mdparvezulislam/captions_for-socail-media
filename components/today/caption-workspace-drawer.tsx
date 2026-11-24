@@ -21,7 +21,9 @@ import {
   regenerateAction,
   saveCaptionAction,
 } from "@/app/actions";
+import { formatForFacebook } from "@/lib/facebook-text";
 import { bn, bnNumber, bnRelative, taka } from "@/lib/format";
+
 import { cn } from "@/lib/cn";
 import type { Caption } from "@/lib/types";
 import type { StudioData } from "@/lib/data";
@@ -101,6 +103,7 @@ export function CaptionWorkspaceDrawer({
   const [loading, setLoading] = useState(true);
   const [pending, startTransition] = useTransition();
   const [includeHashtags, setIncludeHashtags] = useState(true);
+  const [facebookBold, setFacebookBold] = useState(true);
   const [gallery, setGallery] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [captions, setCaptions] = useState<Caption[]>([]);
@@ -138,7 +141,10 @@ export function CaptionWorkspaceDrawer({
       }
       if (event.target instanceof HTMLElement) {
         const tag = event.target.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        const isTextInput =
+          tag === "TEXTAREA" ||
+          (tag === "INPUT" && !["checkbox", "radio", "button"].includes((event.target as HTMLInputElement).type));
+        if (isTextInput) return;
       }
       if (event.key === "ArrowLeft" && data?.prevId) onNavigate(data.prevId);
       if (event.key === "ArrowRight" && data?.nextId) onNavigate(data.nextId);
@@ -149,10 +155,9 @@ export function CaptionWorkspaceDrawer({
 
   function copyText(body: string): string {
     const page = data?.page;
-    if (includeHashtags && page && page.hashtags.length > 0) {
-      return `${body}\n\n${page.hashtags.join(" ")}`;
-    }
-    return body;
+    const tags = includeHashtags && page && page.hashtags.length > 0 ? page.hashtags : [];
+    const raw = tags.length > 0 ? `${body}\n\n${tags.join(" ")}` : body;
+    return formatForFacebook(raw, { bold: facebookBold });
   }
 
   function regenerate(caption: Caption, instruction?: string) {
@@ -371,6 +376,18 @@ export function CaptionWorkspaceDrawer({
                   </span>
                   কপিতে হ্যাশট্যাগ যুক্ত করুন
                 </label>
+                <label className="flex cursor-pointer items-center gap-2 text-[12px] text-ink-soft">
+                  <input
+                    type="checkbox"
+                    checked={facebookBold}
+                    onChange={(event) => setFacebookBold(event.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <span className="relative h-5 w-9 rounded-full border border-line bg-paper-deep transition-colors peer-checked:border-accent peer-checked:bg-accent">
+                    <span className="absolute left-[3px] top-[3px] h-3.5 w-3.5 rounded-full bg-card shadow-sm transition-transform peer-checked:translate-x-[14px]" />
+                  </span>
+                  𝗙acebook বোল্ড
+                </label>
                 <Button
                   size="sm"
                   variant="quiet"
@@ -394,6 +411,7 @@ export function CaptionWorkspaceDrawer({
                   captions={captions}
                   hashtags={page.hashtags}
                   includeHashtags={includeHashtags}
+                  formatBody={facebookBold ? (body) => formatForFacebook(body) : undefined}
                   onCopyText={copyText}
                   onRegenerate={regenerate}
                   onSave={save}

@@ -18,6 +18,7 @@ export function CaptionCardStack({
   captions,
   hashtags,
   includeHashtags,
+  formatBody,
   onCopyText,
   onRegenerate,
   onSave,
@@ -27,6 +28,7 @@ export function CaptionCardStack({
   captions: Caption[];
   hashtags: string[];
   includeHashtags: boolean;
+  formatBody?: (body: string) => string;
   onCopyText: (body: string) => string;
   onRegenerate: (caption: Caption, instruction?: string) => void;
   onSave: (caption: Caption, body: string) => void;
@@ -46,6 +48,7 @@ export function CaptionCardStack({
             meta={meta}
             hashtags={hashtags}
             includeHashtags={includeHashtags}
+            formatBody={formatBody}
             onCopyText={onCopyText}
             onRegenerate={onRegenerate}
             onSave={onSave}
@@ -64,6 +67,7 @@ function CaptionCard({
   meta,
   hashtags,
   includeHashtags,
+  formatBody,
   onCopyText,
   onRegenerate,
   onSave,
@@ -75,6 +79,7 @@ function CaptionCard({
   meta: { label: string; badge: string; badgeTone: "accent" | "sky" | "moss" };
   hashtags: string[];
   includeHashtags: boolean;
+  formatBody?: (body: string) => string;
   onCopyText: (body: string) => string;
   onRegenerate: (caption: Caption, instruction?: string) => void;
   onSave: (caption: Caption, body: string) => void;
@@ -126,7 +131,7 @@ function CaptionCard({
           aria-label="ক্যাপশন এডিট করুন"
         />
       ) : (
-        <p className="caption-text mt-2.5">{body}</p>
+        <p className="caption-text mt-2.5">{formatBody ? formatBody(body) : body}</p>
       )}
 
       {includeHashtags && hashtags.length > 0 ? (

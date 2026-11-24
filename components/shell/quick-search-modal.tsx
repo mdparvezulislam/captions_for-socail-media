@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { IconSearch, IconX } from "@/components/ui/icons";
 import { taka } from "@/lib/format";
@@ -83,8 +84,9 @@ export function QuickSearch({ children }: { children?: React.ReactNode }) {
         {children}
       </button>
 
-      {open ? (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center px-4 pt-[12vh]" role="dialog" aria-modal="true" aria-label="সার্চ">
+      {open && typeof document !== "undefined"
+        ? createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-start justify-center px-4 pt-[12vh]" role="dialog" aria-modal="true" aria-label="সার্চ">
           <button type="button" aria-label="বন্ধ" className="absolute inset-0 bg-ink/45 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
           <div className="animate-rise relative w-full max-w-[520px] overflow-hidden rounded-[18px] border border-line bg-card shadow-[0_30px_80px_-30px_rgba(23,19,15,0.7)]">
             <div className="flex items-center gap-2 border-b border-line px-4 py-3">
@@ -149,8 +151,10 @@ export function QuickSearch({ children }: { children?: React.ReactNode }) {
               ↑↓ নেভিগেট · Enter খুলুন · Esc বন্ধ
             </div>
           </div>
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+      )
+        : null}
     </>
   );
 }

@@ -1,5 +1,6 @@
 import type { CaptionMeta, CaptionType, Page, PosterCopy, Product } from "@/lib/types";
-import { discountPercent, taka } from "@/lib/format";
+import { deriveKeyword } from "@/lib/facebook-text";
+import { discountPercent } from "@/lib/format";
 
 function hash(input: string): number {
   let h = 2166136261;
@@ -14,120 +15,88 @@ function pick<T>(items: T[], seed: string): T {
   return items[hash(seed) % items.length];
 }
 
-function shortName(product: Product, max = 26): string {
-  const name = product.nameBn.replace(/\s+/g, " ").trim();
-  return name.length <= max ? name : `${name.slice(0, max - 1).trimEnd()}…`;
+export function englishName(product: Product): string {
+  return product.enrich?.nameEn?.trim() || product.nameBn;
 }
 
-function moneyLine(product: Product): string {
-  const price = taka(product.priceBdt);
-  if (product.compareAtPriceBdt && product.compareAtPriceBdt > product.priceBdt) {
-    return `${price} · আগে ${taka(product.compareAtPriceBdt)}`;
+export function commentKeyword(product: Product): string {
+  return product.enrich?.keyword?.trim() || deriveKeyword(product.nameBn, product.category);
+}
+
+function featureLabels(product: Product): string[] {
+  return product.enrich?.featureLabels?.length ? product.enrich.featureLabels : product.features.slice(0, 4);
+}
+
+function bulletLines(product: Product, count: number): string {
+  const labels = featureLabels(product);
+  const features = product.features;
+  const lines: string[] = [];
+  for (let index = 0; index < Math.min(count, labels.length, Math.max(features.length, 1)); index++) {
+    const label = labels[index];
+    const description = features[index] ?? product.solutionBn;
+    lines.push(`✅ ${label} - ${description}`);
   }
-  return price;
+  return lines.join("\n");
 }
 
-function offerLine(product: Product): string {
-  return product.offerText?.trim() ? product.offerText.trim() : "সারা দেশে ক্যাশ অন ডেলিভারি";
-}
-
-const HOOKS = {
-  image: [
-    "এই দামে এত সুবিধা কোথায় পাবেন?",
-    "একবার ব্যবহার করলেই বুঝবেন, কেন সবাই নিচ্ছে।",
-    "ঘরের কাজ সহজ করার সবচেয়ে স্মার্ট উপায়।",
-    "আপনার রোজকার কাজটা এখন অর্ধেক সময়ে।",
-    "যেটা একবার কিনলে বারবার কাজে লাগে।",
-    "দামে কম, কাজে বেশি — এটাই আসল হিসাব।",
-    "প্রতিদিনের ঝামেলা কমানোর সহজ সমাধান।",
-  ],
-  video: [
-    "৩০ সেকেন্ডে দেখে নিন — কেন এটা আলাদা 👇",
-    "এই ভিডিওটা শেষ পর্যন্ত দেখুন, তারপর সিদ্ধান্ত নিন 👇",
-    "যেটা দেখে মনে হবে — এটা আমার দরকারই ছিল 👇",
-    "এই একটা জিনিস আপনার রুটিন বদলে দিতে পারে 👇",
-    "শুরুতে দামটা দেখুন, তারপর ফিচার 👇",
-  ],
-  problem: [
-    "সমস্যাটা চিনতে পারছেন?",
-    "প্রতিদিন এই ঝামেলাটা কি আপনারও হয়?",
-    "একটা ছোট সমস্যা, প্রতিদিন বড় হয়।",
-    "এই ঝামেলাটা কি প্রতিদিনই হয়?",
-    "যে সমস্যাটা কেউ বলে না, কিন্তু সবাই ভোগে।",
-  ],
-};
-
-const BENEFIT_LINES = [
-  "সময় বাঁচে, কাজ হয় দ্রুত।",
-  "একবার কিনলে বছরের পর বছর ব্যবহার।",
-  "কম খরচে বেশি সুবিধা।",
-  "যত্ন নিতে হয় না বললেই চলে।",
+const SHORT_HOOKS = [
+  "কাজটা কি আরও দ্রুত ও সহজ করতে চান?",
+  "প্রতিদিনের এই ঝামেলা কি আপনারও আছে?",
+  "এক কেনার মধ্যেই বছরের সমাধান চান?",
 ];
 
-const CTAS = [
-  "অর্ডার করতে ইনবক্স করুন 👇",
-  "আজই অর্ডার করতে মেসেজ দিন 📩",
-  "স্টক ফুরানোর আগে অর্ডার করুন 🛒",
-  "নিচে কমেন্ট করুন, আমরা কল দিচ্ছি 📞",
-  "অর্ডার করতে চাইলে শুধু “অর্ডার” লিখে মেসেজ দিন ✅",
-];
+const CTA_TEMPLATE = "কমেন্টে '{keyword}' লিখুন। দাম আর অর্ডার লিংক ইনবক্সে দিয়ে দিচ্ছি।";
 
-function features(product: Product, count = 2): string[] {
-  const list = product.features.filter(Boolean);
-  if (list.length === 0) return [product.solutionBn];
-  return list.slice(0, count);
+function ctaLine(product: Product): string {
+  return CTA_TEMPLATE.replace("{keyword}", commentKeyword(product));
 }
 
 function tagsFor(product: Product, page: Page): string[] {
-  const base = [
-    ...product.tags.slice(0, 3).map((tag) => `#${tag.replace(/\s+/g, "")}`),
-    ...page.hashtags.slice(0, 3),
-    "#ক্যাশঅনডেলিভারি",
-  ];
-  return Array.from(new Set(base)).slice(0, 6);
+  const keywordTag = `#${commentKeyword(product).replace(/[^A-Za-z0-9]/g, "")}`;
+  const brandTag = `#${page.brandName.replace(/[^A-Za-z0-9]/g, "")}`;
+  const categoryTag = `#${(product.enrich?.keyword ?? product.category).replace(/[^A-Za-z0-9\u0980-\u09FF]/g, "")}`;
+  return Array.from(new Set([keywordTag, brandTag, categoryTag, ...page.hashtags.slice(0, 2)])).slice(0, 5);
 }
 
 export function demoCaption(product: Product, page: Page, type: CaptionType): { body: string; meta: CaptionMeta } {
   const seed = `${product.id}:${type}:${page.id}`;
-  const f = features(product);
-  const hook = pick(HOOKS[type], seed);
-  const benefit = pick(BENEFIT_LINES, `${seed}:b`);
-  const cta = pick(CTAS, `${seed}:c`);
-  const price = moneyLine(product);
-  const offer = offerLine(product);
+  const nameEn = englishName(product);
+  const cta = ctaLine(product);
   const hashtags = tagsFor(product, page);
 
   if (type === "video") {
+    const hook = pick(SHORT_HOOKS, seed);
     const body = [
-      hook,
-      `${product.solutionBn || f[0]}`,
-      `${f[1] ?? benefit} — দাম ${price}`,
+      `${hook} আজই নিয়ে নিন ${nameEn}।`,
+      "",
+      `✅ ${product.features[0] ?? product.solutionBn}।`,
+      "",
       cta,
     ].join("\n");
-    return {
-      body,
-      meta: { hook, cta, angle: "video", source: "demo", hashtags } as CaptionMeta,
-    };
+    return { body, meta: { hook, cta, angle: "video", source: "demo" } };
   }
 
   if (type === "problem") {
     const body = [
-      `${product.problemBn || hook}`,
-      `সমাধান: ${product.solutionBn || f[0]}।`,
-      `${f[0] ? `কেন এটাই: ${f.join(", ")}।` : benefit}`,
-      `আজকের দাম ${price}${product.offerText ? ` — ${product.offerText}` : ""}`,
+      `${product.problemBn}।`,
+      "",
+      `সমাধান: ${product.solutionBn} — ${nameEn}।`,
+      "",
+      bulletLines(product, 3),
+      "",
       cta,
     ].join("\n");
     return { body, meta: { hook: product.problemBn, cta, angle: "problem", source: "demo" } };
   }
 
   const body = [
-    hook,
-    `${product.solutionBn || f[0]}। ${f[1] ? `${f[1]}।` : benefit}`,
-    `💰 ${price} · 📦 ${offer}`,
+    `${product.problemBn}। এই ঝামেলা এড়াতে আমি এখন ব্যবহার করছি ${nameEn}।`,
+    "",
+    bulletLines(product, 4),
+    "",
     cta,
   ].join("\n");
-  return { body, meta: { hook, cta, angle: "image", source: "demo" } };
+  return { body, meta: { hook: product.problemBn, cta, angle: "image", source: "demo" } };
 }
 
 export function demoHashtags(product: Product, page: Page): string[] {
@@ -137,10 +106,10 @@ export function demoHashtags(product: Product, page: Page): string[] {
 export function demoPosterCopy(product: Product, page: Page): PosterCopy {
   const discount = discountPercent(product.priceBdt, product.compareAtPriceBdt);
   return {
-    headline: shortName(product, 28),
+    headline: englishName(product).slice(0, 28),
     subline: product.offerText?.trim() || product.solutionBn.slice(0, 38) || page.tagline,
     badge: discount > 0 ? `${discount}% OFF` : "নতুন",
-    cta: page.ctaText.replace(/^(অর্ডার করতে|কল করুন:?)\s*/i, "").slice(0, 22) || "ইনবক্স করুন",
+    cta: commentKeyword(product).slice(0, 22) || "ইনবক্স করুন",
   };
 }
 

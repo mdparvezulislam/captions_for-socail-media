@@ -48,6 +48,7 @@ const product: Product = {
   tags: ["ফ্যান"],
   imageUrl: null,
   artSeed: "seed",
+  enrich: null,
   isActive: true,
   sourceUpdatedAt: null,
   createdAt: "2026-11-20T00:00:00Z",

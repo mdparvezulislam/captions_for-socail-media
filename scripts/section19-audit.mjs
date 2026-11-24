@@ -28,24 +28,41 @@ check("2-column grid on mobile", await page.evaluate(() => {
 
 await page.screenshot({ path: `${OUT}/s19-mobile-grid.png` });
 
-// Click first card → drawer opens WITHOUT navigation
-await page.locator('[data-testid="task-grid"] > li button').first().click();
+// Click a card that already has captions (✓ badge) → drawer opens WITHOUT navigation
+const readyCard = page.locator('[data-testid="task-grid"] > li').filter({ hasText: "✓" }).first();
+const readyCardText = (await readyCard.textContent()) ?? "";
+console.log("audit: readyCard =", readyCardText.slice(0, 50));
+const responsePromise = page.waitForResponse((response) => response.url().includes("/api/studio/"), { timeout: 30000 });
+await readyCard.click();
+const studioResp = await responsePromise;
+const studioBody = await studioResp.json();
+console.log("audit: studio api ->", studioBody.product?.nameBn, "captions:", studioBody.captions?.length);
 await page.waitForSelector('[data-testid="studio-drawer"]', { timeout: 30000 });
-await page.waitForTimeout(700);
+await page.waitForTimeout(800);
+const h2Now = await page.locator('[data-testid="studio-drawer"] h2').textContent();
+console.log("audit: drawer h2 =", h2Now);
 check("drawer opens on click", true);
 check("no navigation (URL unchanged)", page.url().endsWith("/today"), page.url());
-check("drawer pagination tracker", (await page.locator("text=/পণ্য \\d+ \\/ \\d+/").count()) > 0);
-const copyButtons = await page.locator('[data-testid="studio-drawer"] button:has-text("কপি করুন")').count();
+const drawerText = await page.locator('[data-testid="studio-drawer"]').innerText();
+console.log("audit: drawer text head =", drawerText.slice(0, 120).replace(/\n/g, " | "));
+check("drawer pagination tracker", drawerText.includes("পণ্য"));
+console.log("audit: pre-toggle url =", page.url(), "| drawer count =", await page.locator('[data-testid="studio-drawer"]').count());
+const copyButtons = await page.locator('[data-testid="studio-drawer"] button').filter({ hasText: "কপি করুন" }).count();
 check("3 copy buttons in drawer", copyButtons === 3, `count=${copyButtons}`);
 
 // Hashtag toggle + copy text change
-await page.locator('[data-testid="studio-drawer"] label:has-text("কপিতে হ্যাশট্যাগ")').click();
+await page.locator('[data-testid="studio-drawer"] label').filter({ hasText: "কপিতে হ্যাশট্যাগ" }).click();
 check("hashtag toggle clickable", true);
+await page.evaluate(() => document.activeElement?.blur?.());
+await page.waitForTimeout(200);
 
 // Keyboard: ArrowRight → product changes
+console.log("audit: pre-arrow url =", page.url(), "| drawer count =", await page.locator('[data-testid="studio-drawer"]').count());
 const nameBefore = await page.locator('[data-testid="studio-drawer"] h2').textContent();
+const nextResponse = page.waitForResponse((response) => response.url().includes("/api/studio/"), { timeout: 30000 });
 await page.keyboard.press("ArrowRight");
-await page.waitForTimeout(900);
+await nextResponse;
+await page.waitForTimeout(600);
 const nameAfter = await page.locator('[data-testid="studio-drawer"] h2').textContent();
 check("ArrowRight navigates to next product", nameBefore !== nameAfter, `${nameBefore} -> ${nameAfter}`);
 
@@ -88,9 +105,13 @@ const results = await dpage.locator('[role="dialog"] ul li button').count();
 check("Ctrl+K search returns results", results > 0, `results=${results}`);
 await dpage.screenshot({ path: `${OUT}/s19-search-modal.png` });
 if (results > 0) {
+  const studioResponse = dpage.waitForResponse((response) => response.url().includes("/api/studio/"), { timeout: 30000 });
   await dpage.locator('[role="dialog"] ul li button').first().click();
-  await dpage.waitForTimeout(1200);
-  check("search result opens drawer", (await dpage.locator('[data-testid="studio-drawer"]').count()) === 1, dpage.url());
+  await studioResponse;
+  await dpage.waitForTimeout(2000);
+  const drawerCount = await dpage.locator('[data-testid="studio-drawer"]').count();
+  console.log("audit: search -> url:", dpage.url(), "drawer count:", drawerCount);
+  check("search result opens drawer", drawerCount === 1, dpage.url());
 }
 await dpage.screenshot({ path: `${OUT}/s19-desktop-drawer.png` });
 

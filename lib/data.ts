@@ -10,6 +10,7 @@ import type {
   Member,
   Page,
   Product,
+  ProductEnrich,
 } from "@/lib/types";
 
 type Row = Record<string, unknown>;
@@ -73,6 +74,7 @@ export function mapProduct(row: Row): Product {
     tags: parseJson<string[]>(row.tags_json, []),
     imageUrl: nullableStr(row.image_url),
     artSeed: str(row.art_seed),
+    enrich: parseJson<ProductEnrich | null>(row.enrich_json, null),
     isActive: num(row.is_active, 1) === 1,
     sourceUpdatedAt: nullableStr(row.source_updated_at),
     createdAt: str(row.created_at),

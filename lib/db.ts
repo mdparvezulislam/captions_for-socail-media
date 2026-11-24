@@ -16,6 +16,17 @@ export function readyDb(): Promise<D1Database> {
     bootstrap = (async () => {
       const database = env.DB;
       await database.batch(SCHEMA_STATEMENTS.map((statement) => database.prepare(statement)));
+      // Idempotent additive migration for existing databases.
+      for (const alteration of [
+        "ALTER TABLE products ADD COLUMN enrich_json TEXT",
+        "ALTER TABLE captions ADD COLUMN formatted_body TEXT",
+      ]) {
+        try {
+          await database.prepare(alteration).run();
+        } catch {
+          /* column already exists */
+        }
+      }
       await seedDatabase(database);
     })().catch((error) => {
       bootstrap = null;

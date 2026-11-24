@@ -4,6 +4,7 @@ import { PosterStudio } from "@/components/poster/poster-studio";
 import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/ui/copy-button";
 import { getCaption, getPageById, getProduct } from "@/lib/data";
+import { imageSrcFor } from "@/lib/facebook-text";
 import { captionCopyText } from "@/lib/facebook-text";
 import { bnRelative, discountPercent, taka } from "@/lib/format";
 import type { PosterCopy } from "@/lib/types";
@@ -76,7 +77,25 @@ export default async function PosterPage({ params }: { params: Promise<{ id: str
         </div>
       </header>
 
-      <PosterStudio data={data} />
+      <div className="flex flex-wrap items-center gap-2">
+        <a
+          href={imageSrcFor(product)}
+          download={`product-${product.sourceId}.jpg`}
+          className="inline-flex h-9 items-center rounded-[12px] border border-line bg-card px-3.5 text-[12.5px] font-[560] text-ink-soft hover:text-ink"
+        >
+          প্রোডাক্টের ছবি ডাউনলোড
+        </a>
+        {product.imageUrl ? (
+          <span className="text-[11.5px] text-ink-faint">সোর্স: স্টোর ক্যাটালগ</span>
+        ) : (
+          <span className="text-[11.5px] text-ink-faint">সোর্স: জেনারেটেড আর্ট</span>
+        )}
+      </div>
+
+      <PosterStudio
+        data={data}
+        imageUrl={product.imageUrl ? `/api/image?url=${encodeURIComponent(product.imageUrl)}` : null}
+      />
 
       <section className="card-surface p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">

@@ -128,16 +128,32 @@ export async function syncUniStoreCatalog(options: {
   const started = Date.now();
   try {
     const response = await fetchJson(options.url ?? UNISTORE_SYNC_URL, {
-      headers: { accept: "application/json" },
+      headers: {
+        accept: "application/json",
+        "user-agent": "CaptionEngine/1.0 (+https://c.uniquestorebd.top)",
+      },
       signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) {
       return { ok: false, created: 0, updated: 0, skipped: 0, deactivated: 0, error: `HTTP ${response.status}` };
     }
-    const payload = (await response.json()) as UniStoreResponse;
+    const text = await response.text();
+    let payload: UniStoreResponse = {};
+    try {
+      payload = JSON.parse(text) as UniStoreResponse;
+    } catch {
+      return { ok: false, created: 0, updated: 0, skipped: 0, deactivated: 0, error: `JSON parse error: ${text.slice(0, 100)}` };
+    }
     const items = payload.products ?? payload.data ?? [];
     if (!Array.isArray(items) || items.length === 0) {
-      return { ok: false, created: 0, updated: 0, skipped: 0, deactivated: 0, error: "empty catalog" };
+      return {
+        ok: false,
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        deactivated: 0,
+        error: `empty catalog (keys: ${Object.keys(payload).join(",") || "none"}, len: ${text.length}, head: ${text.slice(0, 80).replace(/\n/g, " ")})`,
+      };
     }
 
     const db = await readyDb();

@@ -14,10 +14,16 @@ const mobile = await browser.newContext({ viewport: { width: 375, height: 812 },
 const page = await mobile.newPage();
 page.on("pageerror", (error) => report.consoleErrors.push(`mobile pageerror: ${error.message.slice(0, 160)}`));
 
-await page.goto(`${BASE}/today`, { waitUntil: "networkidle", timeout: 45000 });
-await page.waitForSelector('[data-testid="task-grid"]', { timeout: 30000 });
+// Secret-key login (flparvez = admin)
+await page.goto(`${BASE}/login`, { waitUntil: "networkidle", timeout: 45000 });
+await page.fill('input[type="password"]', process.env.AUDIT_KEY ?? "flparvez");
+await page.click('button[type="submit"]');
+await page.waitForSelector('[data-testid="task-grid"]', { timeout: 60000 });
 const cardCount = await page.locator('[data-testid="task-grid"] > li').count();
 check("grid renders cards", cardCount > 0, `count=${cardCount}`);
+
+const realImageCount = await page.locator('[data-testid="task-grid"] img[src*="/api/image"]').count();
+check("real product images shown in grid", realImageCount > 0, `realImages=${realImageCount}/${cardCount}`);
 
 const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 check("no horizontal overflow @375px", overflow <= 2, `overflow=${overflow}px`);
@@ -88,8 +94,11 @@ const desktop = await browser.newContext({ viewport: { width: 1440, height: 1000
 const dpage = await desktop.newPage();
 dpage.on("pageerror", (error) => report.consoleErrors.push(`desktop pageerror: ${error.message.slice(0, 160)}`));
 
-await dpage.goto(`${BASE}/today`, { waitUntil: "networkidle", timeout: 45000 });
-await dpage.waitForSelector('[data-testid="task-grid"]', { timeout: 30000 });
+// ডেস্কটপ কনটেক্সটও লগইন করে
+await dpage.goto(`${BASE}/login`, { waitUntil: "networkidle", timeout: 60000 });
+await dpage.fill('input[type="password"]', process.env.AUDIT_KEY ?? "flparvez");
+await dpage.click('button[type="submit"]');
+await dpage.waitForSelector('[data-testid="task-grid"]', { timeout: 60000 });
 check("6-column grid on desktop", await dpage.evaluate(() => {
   const grid = document.querySelector('[data-testid="task-grid"]');
   return grid && getComputedStyle(grid).gridTemplateColumns.split(" ").length >= 6;
@@ -99,7 +108,7 @@ await dpage.screenshot({ path: `${OUT}/s19-desktop-grid.png` });
 // Ctrl+K search modal
 await dpage.keyboard.press("ControlOrMeta+k");
 await dpage.waitForTimeout(400);
-await dpage.keyboard.type("ফ্যান");
+await dpage.keyboard.type("Wireless");
 await dpage.waitForTimeout(900);
 const results = await dpage.locator('[role="dialog"] ul li button').count();
 check("Ctrl+K search returns results", results > 0, `results=${results}`);

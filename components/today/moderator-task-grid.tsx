@@ -90,7 +90,7 @@ export function ModeratorTaskGrid({
   return (
     <div className="flex flex-col gap-3">
       {/* ফিল্টার পিলস */}
-      <div className="scroll-x -mx-1 flex items-center gap-1.5 px-1 py-0.5" role="tablist" aria-label="ফিল্টার">
+      <div className="scroll-x flex items-center gap-1.5 py-0.5" role="tablist" aria-label="ফিল্টার">
         {FILTER_META.map((item) => {
           const active = filter === item.key;
           const count = counts[item.key];

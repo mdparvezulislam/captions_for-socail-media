@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { IconDownload, IconImage } from "@/components/ui/icons";
-import { drawPoster, posterSize, type PosterData, type PosterRatio, type PosterTemplate } from "@/lib/poster";
+import { drawPoster, loadImageElement, posterSize, type PosterData, type PosterRatio, type PosterTemplate } from "@/lib/poster";
 import { cn } from "@/lib/cn";
 
 const RATIOS: { value: PosterRatio; label: string; hint: string }[] = [
@@ -18,21 +18,36 @@ const TEMPLATES: { value: PosterTemplate; label: string }[] = [
   { value: "minimal", label: "মিনিমাল" },
 ];
 
-export function PosterStudio({ data }: { data: PosterData }) {
+export function PosterStudio({ data, imageUrl }: { data: PosterData; imageUrl?: string | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ratio, setRatio] = useState<PosterRatio>(data.ratio);
   const [template, setTemplate] = useState<PosterTemplate>(data.template);
   const [ready, setReady] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  const [productImage, setProductImage] = useState<HTMLImageElement | null>(null);
 
   const current: PosterData = useMemo(() => ({ ...data, ratio, template }), [data, ratio, template]);
 
   const paint = useCallback(async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    await drawPoster(canvas, current);
+    await drawPoster(canvas, current, productImage);
     setReady(true);
-  }, [current]);
+  }, [current, productImage]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!imageUrl) {
+      setProductImage(null);
+      return;
+    }
+    void loadImageElement(imageUrl).then((image) => {
+      if (!cancelled) setProductImage(image);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrl]);
 
   useEffect(() => {
     let cancelled = false;

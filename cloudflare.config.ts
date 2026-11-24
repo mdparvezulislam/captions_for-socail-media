@@ -22,6 +22,9 @@ export default defineConfig({
       GEMINI_MODEL: bindings.secret(),
       INTERNAL_JOB_TOKEN: bindings.secret(),
       PRODUCT_API_TOKEN: bindings.secret(),
+      ADMIN_KEY: bindings.secret(),
+      MOD_KEY: bindings.secret(),
+      AUTH_SECRET: bindings.secret(),
     },
   }),
 });

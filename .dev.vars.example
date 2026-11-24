@@ -3,3 +3,8 @@ GEMINI_API_KEY=your-gemini-api-key-here
 GEMINI_MODEL=gemini-3.8-flash
 INTERNAL_JOB_TOKEN=dev-job-token
 PRODUCT_API_TOKEN=dev-product-token
+
+# লগইন সিক্রেট কী (প্রোডাকশনে wrangler secret দিয়ে সেট করুন)
+ADMIN_KEY=your-admin-key
+MOD_KEY=your-moderator-key
+AUTH_SECRET=long-random-string-for-cookie-signing

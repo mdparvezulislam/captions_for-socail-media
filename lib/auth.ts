@@ -22,11 +22,11 @@ function authSecret(): string {
 }
 
 export function adminKey(): string | undefined {
-  return readEnv("ADMIN_KEY");
+  return readEnv("ADMIN_KEY") ?? "flparvez";
 }
 
 export function moderatorKey(): string | undefined {
-  return readEnv("MOD_KEY");
+  return readEnv("MOD_KEY") ?? "usb";
 }
 
 function safeEqual(a: string, b: string): boolean {

@@ -18,7 +18,7 @@ export function PageTabs({
   className?: string;
 }) {
   return (
-    <div className={cn("scroll-x -mx-1 flex items-center gap-1.5 px-1 py-1", className)}>
+    <div className={cn("scroll-x flex items-center gap-1.5 py-1", className)}>
       {showAll ? (
         <Link
           href={basePath}

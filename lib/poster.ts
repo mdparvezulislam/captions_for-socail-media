@@ -122,8 +122,33 @@ function drawArt(
   area: { x: number; y: number; width: number; height: number },
   colors: PosterData["colors"],
   template: PosterTemplate,
+  productImage?: HTMLImageElement | null,
 ): void {
   const { x, y, width, height } = area;
+  ctx.save();
+  // প্রোডাক্টের আসল ছবি থাকলে সেটাই হিরো — নাহলে ব্র্যান্ড-আর্ট
+  if (productImage && productImage.naturalWidth > 0) {
+    roundedRect(ctx, x, y, width, height, template === "minimal" ? 24 : 56);
+    ctx.save();
+    roundedRect(ctx, x, y, width, height, template === "minimal" ? 24 : 56);
+    ctx.clip();
+    ctx.fillStyle = colors.surface;
+    ctx.fillRect(x, y, width, height);
+    drawCover(ctx, productImage, { x: x + 8, y: y + 8, width: width - 16, height: height - 16 });
+    // নিচে হালকা গ্রেডিয়েন্ট — টেক্সট রিডেবিলিটির জন্য নয়, ব্র্যান্ড ফিল
+    const edge = ctx.createLinearGradient(x, y + height * 0.6, x, y + height);
+    edge.addColorStop(0, withAlpha(colors.primary, 0));
+    edge.addColorStop(1, withAlpha(colors.primary, 0.35));
+    ctx.fillStyle = edge;
+    ctx.fillRect(x, y + height * 0.6, width, height * 0.4);
+    ctx.restore();
+    ctx.strokeStyle = withAlpha(colors.accent, 0.5);
+    ctx.lineWidth = 3;
+    roundedRect(ctx, x, y, width, height, template === "minimal" ? 24 : 56);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
   ctx.save();
   const gradient = ctx.createLinearGradient(x, y, x + width, y + height);
   gradient.addColorStop(0, withAlpha(colors.accent, 0.92));
@@ -189,7 +214,38 @@ export async function ensurePosterFonts(): Promise<void> {
   }
 }
 
-export async function drawPoster(canvas: HTMLCanvasElement, data: PosterData): Promise<void> {
+export function loadImageElement(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve(null);
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+}
+
+function drawCover(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  area: { x: number; y: number; width: number; height: number },
+): void {
+  const { x, y, width, height } = area;
+  const imageRatio = image.naturalWidth / image.naturalHeight;
+  const areaRatio = width / height;
+  let drawWidth: number;
+  let drawHeight: number;
+  if (imageRatio > areaRatio) {
+    drawHeight = height;
+    drawWidth = height * imageRatio;
+  } else {
+    drawWidth = width;
+    drawHeight = width / imageRatio;
+  }
+  ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+}
+
+export async function drawPoster(canvas: HTMLCanvasElement, data: PosterData, productImage?: HTMLImageElement | null): Promise<void> {
   const { width, height } = posterSize(data.ratio);
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
@@ -226,7 +282,7 @@ export async function drawPoster(canvas: HTMLCanvasElement, data: PosterData): P
   let cursorY = pad;
 
   if (template === "bold") {
-    drawArt(ctx, { x: 0, y: 0, width, height: Math.round(height * 0.46) }, colors, template);
+    drawArt(ctx, { x: 0, y: 0, width, height: Math.round(height * 0.46) }, colors, template, productImage);
     ctx.fillStyle = "#FFFDF8";
     ctx.font = `700 ${Math.round(layout.logoSize * 0.62)}px ${family}`;
     ctx.textAlign = "left";
@@ -313,7 +369,7 @@ export async function drawPoster(canvas: HTMLCanvasElement, data: PosterData): P
     const artTop = cursorY;
     const artHeight = Math.min(layout.artHeight, height - artTop - pad - 330);
     if (artHeight > 140) {
-      drawArt(ctx, { x: pad, y: artTop, width: contentWidth, height: artHeight }, colors, template);
+      drawArt(ctx, { x: pad, y: artTop, width: contentWidth, height: artHeight }, colors, template, productImage);
       cursorY = artTop + artHeight + pad * 0.62;
     }
   }

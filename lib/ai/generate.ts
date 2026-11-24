@@ -182,11 +182,15 @@ export async function generateCaptionDrafts(input: GenerateInput): Promise<Gener
   const issues: string[] = [];
 
   const keyword = asText(json.comment_keyword, commentKeyword(product));
-  const videoParts = [asText(video.hook), asText(video.body), asText(video.cta)].filter(Boolean);
+  const videoStory = [asText(video.hook), asText(video.body)].filter(Boolean).join("\n");
+  const videoCta = asText(video.cta);
+  const videoFormatted = [videoStory, videoCta].filter(Boolean).join("\n\n");
+  // Never allow robotic "সমাধান:" label prefix in Caption 3
+  const cleanProblem = asText(json.problem_caption).replace(/(^|\n)\s*সমাধান\s*[:：\-–—]\s*/g, "$1");
   const raw: Record<CaptionType, string> = {
     image: asText(json.image_caption),
-    video: videoParts.join("\n\n"),
-    problem: asText(json.problem_caption),
+    video: videoFormatted,
+    problem: cleanProblem,
   };
 
   const drafts: CaptionDraft[] = (["image", "video", "problem"] as CaptionType[]).map((type) => {

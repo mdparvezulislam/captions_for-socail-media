@@ -65,24 +65,20 @@ export function demoCaption(product: Product, page: Page, type: CaptionType): { 
   const hashtags = tagsFor(product, page);
 
   if (type === "video") {
-    const hook = pick(SHORT_HOOKS, seed);
+    const hook = `${product.problemBn} — এই প্রতিদিনের ঝামেলা দূর করবে ${nameEn}! 😇`;
     const body = [
       hook,
-      `প্রতিদিনের এই ঝামেলার স্মার্ট সমাধান ${nameEn} — ${product.solutionBn}।`,
-      bulletLines(product, 2) || `✅ ${product.features[0] ?? product.solutionBn}`,
+      `${product.solutionBn} — সহজ ও ঝামেলাহীন ব্যবহারে দারুণ অভিজ্ঞতা পাবেন। 😁`,
       "",
       cta,
-    ]
-      .filter((line, idx, arr) => !(line === "" && arr[idx - 1] === ""))
-      .join("\n");
+    ].join("\n");
     return { body, meta: { hook, cta, angle: "video", source: "demo" } };
   }
 
   if (type === "problem") {
     const body = [
-      `${product.problemBn}।`,
-      "",
-      `সমাধান: ${product.solutionBn} — ${nameEn}।`,
+      `${product.problemBn} — এই প্রতিদিনের ঝামেলা দূর করবে ${nameEn}! 😇`,
+      `${product.solutionBn}, যা আপনার দৈনন্দিন কাজকে করবে আরও সহজ ও আরামদায়ক। 🥰`,
       "",
       bulletLines(product, 3),
       "",

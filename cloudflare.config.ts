@@ -1,0 +1,22 @@
+import { bindings, defineConfig, defineWorker } from "cf/config";
+
+export default defineConfig({
+  worker: defineWorker({
+    name: "caption-engine",
+    entrypoint: "vinext/server/fetch-handler",
+    compatibilityDate: "2026-11-24",
+    compatibilityFlags: ["nodejs_compat"],
+    assets: {
+      htmlHandling: "none",
+      notFoundHandling: "none",
+      runWorkerFirst: ["/*", "!/_next/static/*", "!/*/_next/static/*"],
+    },
+    env: {
+      ASSETS: bindings.assets(),
+      IMAGES: bindings.images(),
+      DB: bindings.d1({ name: "caption-engine-db" }),
+      MEDIA: bindings.r2({ name: "caption-engine-media" }),
+      BROWSER: bindings.browser(),
+    },
+  }),
+});

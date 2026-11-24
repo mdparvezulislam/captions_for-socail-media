@@ -14,6 +14,10 @@ function apiKey(): string | undefined {
   return typeof key === "string" && key.trim().length > 10 ? key.trim() : undefined;
 }
 
+export function isLiveAiAvailable(): boolean {
+  return Boolean(apiKey());
+}
+
 function modelName(): string {
   const model = (env as unknown as Record<string, unknown>).GEMINI_MODEL;
   return typeof model === "string" && model.trim() ? model.trim() : "gemini-3.8-flash";
@@ -126,6 +130,78 @@ export interface BatchOutcome {
   productNames: string[];
 }
 
+export interface PickedBatch {
+  ok: boolean;
+  batch?: number;
+  runId?: string;
+  relaxed?: boolean;
+  products: { id: string; nameBn: string; score: number }[];
+  message?: string;
+}
+
+/**
+ * Fast D1-only selection step (<100ms): picks today's top N priority products
+ * without calling Gemini so the UI can generate them progressively 1-by-1
+ * with live progress and zero Cloudflare Worker request timeout.
+ */
+export async function pickBatchProducts(page: Page, size?: number): Promise<PickedBatch> {
+  const database = await readyDb();
+  const date = dhakaDate();
+  const count = Math.max(1, Math.min(size ?? page.dailyCount, 10));
+
+  const [products, lastUsed, usedToday] = await Promise.all([
+    listProducts(page.id),
+    getLastUsed(page.id),
+    getUsedToday(page.id, date),
+  ]);
+
+  if (products.length === 0) {
+    return { ok: false, products: [], message: "এই পেজে কোনো প্রোডাক্ট নেই। আগে প্রোডাক্ট সিঙ্ক করুন।" };
+  }
+
+  const selection = pickTopProducts({
+    products,
+    lastUsed,
+    usedToday,
+    today: date,
+    count,
+    gapDays: page.repeatGapDays,
+    seed: `${page.id}:${date}`,
+  });
+
+  if (selection.picked.length === 0) {
+    return {
+      ok: false,
+      products: [],
+      message: "আজ এই পেজের সব প্রোডাক্ট ব্যবহার হয়ে গেছে — নতুন প্রোডাক্ট যোগ করুন বা কাল আবার দেখুন।",
+    };
+  }
+
+  const batchRow = await database
+    .prepare("SELECT MAX(batch) AS max_batch FROM selection_runs WHERE page_id = ? AND run_date = ?")
+    .bind(page.id, date)
+    .first<{ max_batch: number | null }>();
+  const batch = Math.max(0, Number(batchRow?.max_batch ?? 0)) + 1;
+  const runId = id("run");
+
+  await database
+    .prepare("INSERT INTO selection_runs (id, page_id, run_date, batch, seed, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(runId, page.id, date, batch, `${page.id}:${date}:${batch}`, new Date().toISOString())
+    .run();
+
+  return {
+    ok: true,
+    batch,
+    runId,
+    relaxed: selection.relaxed,
+    products: selection.picked.map((item) => ({
+      id: item.product.id,
+      nameBn: item.product.nameBn,
+      score: item.score,
+    })),
+  };
+}
+
 export async function generateBatch(page: Page, size?: number): Promise<BatchOutcome> {
   const database = await readyDb();
   const date = dhakaDate();
@@ -165,32 +241,20 @@ export async function generateBatch(page: Page, size?: number): Promise<BatchOut
     .bind(page.id, date)
     .first<{ max_batch: number | null }>();
   const batch = Math.max(0, Number(batchRow?.max_batch ?? 0)) + 1;
+  const runId = id("run");
 
   await database
     .prepare("INSERT INTO selection_runs (id, page_id, run_date, batch, seed, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(id("run"), page.id, date, batch, `${page.id}:${date}:${batch}`, new Date().toISOString())
+    .bind(runId, page.id, date, batch, `${page.id}:${date}:${batch}`, new Date().toISOString())
     .run();
-
-  const runRow = await database
-    .prepare("SELECT id FROM selection_runs WHERE page_id = ? AND run_date = ? AND batch = ?")
-    .bind(page.id, date, batch)
-    .first<{ id: string }>();
-
-  if (runRow) {
-    await database.batch(
-      selection.picked.map((item, index) =>
-        database
-          .prepare("INSERT OR IGNORE INTO daily_selections (run_id, product_id, position, score, pinned) VALUES (?, ?, ?, ?, 0)")
-          .bind(runRow.id, item.product.id, index, item.score),
-      ),
-    );
-  }
 
   const avoid = await recentBodies(page.id);
   let created = 0;
+  let lastErrorMsg = "";
   const failures: string[] = [];
 
-  await mapLimit(selection.picked, 2, async (item, index) => {
+  // Run sequentially (concurrency 1) to avoid Gemini free-tier burst 503 contention.
+  await mapLimit(selection.picked, 1, async (item, index) => {
     const started = Date.now();
     try {
       const outcome = await generateCaptionDrafts({
@@ -211,6 +275,10 @@ export async function generateBatch(page: Page, size?: number): Promise<BatchOut
         tokensIn: outcome.tokensIn,
         tokensOut: outcome.tokensOut,
       });
+      await database
+        .prepare("INSERT OR IGNORE INTO daily_selections (run_id, product_id, position, score, pinned) VALUES (?, ?, ?, ?, 0)")
+        .bind(runId, item.product.id, index, item.score)
+        .run();
       created += 3;
       await logGeneration({
         pageId: page.id,
@@ -222,17 +290,22 @@ export async function generateBatch(page: Page, size?: number): Promise<BatchOut
         tokens: outcome.tokensIn + outcome.tokensOut,
       });
     } catch (error) {
+      const errText = error instanceof Error ? error.message : String(error);
+      lastErrorMsg = errText;
       failures.push(item.product.nameBn);
       await logGeneration({
         pageId: page.id,
         productId: item.product.id,
         stage: "batch",
         status: "failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: errText,
         latencyMs: Date.now() - started,
       });
     }
   });
+
+  const quotaHit = /429|quota/i.test(lastErrorMsg);
+  const highDemand = /503|high demand|UNAVAILABLE/i.test(lastErrorMsg);
 
   return {
     ok: created > 0,
@@ -242,11 +315,15 @@ export async function generateBatch(page: Page, size?: number): Promise<BatchOut
     productNames: selection.picked.map((item) => item.product.nameBn),
     message:
       created === 0
-        ? "জেনারেশন ব্যর্থ হয়েছে, একটু পরে আবার চেষ্টা করুন।"
+        ? quotaHit
+          ? "Gemini API-র দৈনিক ফ্রি কোটা শেষ হয়েছে — কিছুক্ষণ পর আবার চেষ্টা করুন বা AI Studio-তে বিলিং চালু করুন।"
+          : highDemand
+            ? "Gemini সার্ভারে সাময়িক চাপ বেশি (503) — কয়েক সেকেন্ড পর আবার ক্লিক করুন।"
+            : "জেনারেশন ব্যর্থ হয়েছে, একটু পরে আবার চেষ্টা করুন।"
         : selection.relaxed
           ? "নতুন প্রোডাক্ট কম, তাই কিছু পুরনো প্রোডাক্ট আনা হয়েছে।"
           : failures.length > 0
-            ? `${failures.length}টি প্রোডাক্টে সমস্যা হয়েছে।`
+            ? `${failures.length}টি প্রোডাক্টে সমস্যা হয়েছে, বাকিগুলো তৈরি সম্পন্ন।`
             : undefined,
   };
 }
@@ -254,18 +331,20 @@ export async function generateBatch(page: Page, size?: number): Promise<BatchOut
 export async function ensureProductCaptions(
   page: Page,
   product: Product,
-  options: { batch?: number; position?: number } = {},
+  options: { batch?: number; position?: number; runId?: string; score?: number; force?: boolean } = {},
 ): Promise<Caption[]> {
   const database = await readyDb();
   const date = dhakaDate();
 
-  const existing = await database
-    .prepare("SELECT * FROM captions WHERE page_id = ? AND product_id = ? AND run_date = ?")
-    .bind(page.id, product.id, date)
-    .all<Row>();
+  if (!options.force) {
+    const existing = await database
+      .prepare("SELECT * FROM captions WHERE page_id = ? AND product_id = ? AND run_date = ?")
+      .bind(page.id, product.id, date)
+      .all<Row>();
 
-  if ((existing.results ?? []).length >= 3) {
-    return (existing.results ?? []).map(mapCaption);
+    if ((existing.results ?? []).length >= 3) {
+      return (existing.results ?? []).map(mapCaption);
+    }
   }
 
   const started = Date.now();
@@ -289,10 +368,17 @@ export async function ensureProductCaptions(
     tokensOut: outcome.tokensOut,
   });
 
+  if (options.runId) {
+    await database
+      .prepare("INSERT OR IGNORE INTO daily_selections (run_id, product_id, position, score, pinned) VALUES (?, ?, ?, ?, 0)")
+      .bind(options.runId, product.id, options.position ?? 0, options.score ?? 0)
+      .run();
+  }
+
   await logGeneration({
     pageId: page.id,
     productId: product.id,
-    stage: "on-demand",
+    stage: options.runId ? "batch" : "on-demand",
     status: outcome.source === "demo" ? "demo" : "ok",
     latencyMs: outcome.latencyMs ?? Date.now() - started,
     model: outcome.model,

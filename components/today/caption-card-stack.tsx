@@ -145,7 +145,7 @@ function CaptionCard({
     if (copyTimer.current) clearTimeout(copyTimer.current);
     copyTimer.current = setTimeout(() => setCopied(false), 2200);
 
-    showToast("✓ ফেসবুক ক্যাপশন কপি সম্পন্ন! পেজে বা গ্রুপে সরাসরি পেস্ট করুন");
+    showToast("ক্যাপশন কপি হয়েছে! Facebook-এ পেস্ট করুন");
   }
 
   return (

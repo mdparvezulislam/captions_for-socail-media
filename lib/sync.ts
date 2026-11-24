@@ -87,22 +87,31 @@ export function mapUniStoreProduct(item: UniStoreProduct, pageId: string) {
     enrich.keyword = meaningful.reduce((best, word) => (word.length > best.length ? word : best));
   }
 
+  const sourceId = (item.sku?.trim() || item.id).trim();
+  const baseForPercent = compareAt ?? price;
+  const computedPercent =
+    item.discountPercent ?? (baseForPercent > 0 ? Math.round((discount / baseForPercent) * 100) : 0);
+
   return {
     pageId,
-    sourceId: item.sku || item.id,
+    sourceId,
     nameBn: name,
     category: item.category?.name?.trim() || "অন্যান্য",
     priceBdt: price,
     compareAtPriceBdt: compareAt,
     stock: (item.inStock ?? item.availability === "in_stock") ? 120 : 0,
-    offerText: discount > 0 ? `Save ৳${discount} (${item.discountPercent ?? Math.round((discount / (compareAt ?? price)) * 100)}% OFF)` : "ক্যাশ অন ডেলিভারি",
+    offerText: discount > 0 ? `Save ৳${discount} (${computedPercent}% OFF)` : "ক্যাশ অন ডেলিভারি",
     features,
     problemBn: firstBanglaSentence(item.shortDescription ?? item.description),
     solutionBn: firstBanglaSentence(item.description),
     material: null,
     targetAudience: null,
     tags: [item.category?.name?.trim() ?? "অন্যান্য"],
-    imageUrl: item.primaryImage ?? item.images?.find((image) => image.isPrimary)?.url ?? null,
+    imageUrl:
+      item.primaryImage ??
+      item.images?.find((image) => image.isPrimary)?.url ??
+      item.images?.[0]?.url ??
+      null,
     artSeed: item.slug || item.id,
     enrich,
     isActive: 1,
@@ -119,125 +128,193 @@ export interface SyncOutcome {
   error?: string;
 }
 
+type ServiceFetcher = { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
+
+async function resolveStoreFetcher(url: string, customFetch?: typeof fetch): Promise<typeof fetch> {
+  if (customFetch) return customFetch;
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === "uniquestorebd.top" || parsed.hostname === "www.uniquestorebd.top") {
+      const cfMod = (await import("cloudflare:workers").catch(() => null)) as {
+        env?: Record<string, unknown>;
+      } | null;
+      const service = cfMod?.env?.STORE_WORKER as ServiceFetcher | undefined;
+      if (service && typeof service.fetch === "function") {
+        return async (input, init) => {
+          try {
+            const res = await service.fetch(input, init);
+            if (res.ok) return res;
+          } catch {
+            // fall back to public fetch
+          }
+          return fetch(input, init);
+        };
+      }
+    }
+  } catch {
+    // fall back to global fetch
+  }
+  return fetch;
+}
+
+function buildPageUrl(baseUrl: string, pageNum: number): string {
+  try {
+    const parsed = new URL(baseUrl);
+    if (!parsed.searchParams.has("limit")) {
+      parsed.searchParams.set("limit", "100");
+    }
+    if (pageNum > 1) {
+      parsed.searchParams.set("page", String(pageNum));
+    }
+    return parsed.toString();
+  } catch {
+    return baseUrl;
+  }
+}
+
 export async function syncUniStoreCatalog(options: {
   pageId: string;
   url?: string;
   fetchImpl?: typeof fetch;
 }): Promise<SyncOutcome> {
-  const fetchJson = options.fetchImpl ?? fetch;
+  const baseUrl = options.url ?? UNISTORE_SYNC_URL;
+  const fetchJson = await resolveStoreFetcher(baseUrl, options.fetchImpl);
   const started = Date.now();
   try {
-    const response = await fetchJson(options.url ?? UNISTORE_SYNC_URL, {
-      headers: {
-        accept: "application/json",
-        "user-agent": "CaptionEngine/1.0 (+https://c.uniquestorebd.top)",
-      },
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) {
-      return { ok: false, created: 0, updated: 0, skipped: 0, deactivated: 0, error: `HTTP ${response.status}` };
+    const headers = {
+      accept: "application/json",
+      "user-agent": "CaptionEngine/1.0 (+https://c.uniquestorebd.top)",
+    };
+
+    const fetchPage = async (pageNum: number): Promise<{ ok: true; payload: UniStoreResponse } | { ok: false; error: string }> => {
+      const response = await fetchJson(buildPageUrl(baseUrl, pageNum), {
+        headers,
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!response.ok) {
+        return { ok: false, error: `HTTP ${response.status}` };
+      }
+      const text = await response.text();
+      try {
+        return { ok: true, payload: JSON.parse(text) as UniStoreResponse };
+      } catch {
+        return { ok: false, error: `JSON parse error: ${text.slice(0, 100)}` };
+      }
+    };
+
+    const first = await fetchPage(1);
+    if (!first.ok) {
+      return { ok: false, created: 0, updated: 0, skipped: 0, deactivated: 0, error: first.error };
     }
-    const text = await response.text();
-    let payload: UniStoreResponse = {};
-    try {
-      payload = JSON.parse(text) as UniStoreResponse;
-    } catch {
-      return { ok: false, created: 0, updated: 0, skipped: 0, deactivated: 0, error: `JSON parse error: ${text.slice(0, 100)}` };
-    }
-    const items = payload.products ?? payload.data ?? [];
-    if (!Array.isArray(items) || items.length === 0) {
+
+    const firstItems = first.payload.products ?? first.payload.data ?? [];
+    if (!Array.isArray(firstItems) || firstItems.length === 0) {
       return {
         ok: false,
         created: 0,
         updated: 0,
         skipped: 0,
         deactivated: 0,
-        error: `empty catalog (keys: ${Object.keys(payload).join(",") || "none"}, len: ${text.length}, head: ${text.slice(0, 80).replace(/\n/g, " ")})`,
+        error: "স্টোর API থেকে কোনো অ্যাক্টিভ প্রোডাক্ট পাওয়া যায়নি (total: 0)",
       };
+    }
+
+    const allItems: UniStoreProduct[] = [...firstItems];
+    const totalPages = Math.min(20, Math.max(1, Number(first.payload.pagination?.totalPages ?? 1)));
+    for (let pageNum = 2; pageNum <= totalPages; pageNum++) {
+      const next = await fetchPage(pageNum);
+      if (!next.ok) break;
+      const nextItems = next.payload.products ?? next.payload.data ?? [];
+      if (!Array.isArray(nextItems) || nextItems.length === 0) break;
+      allItems.push(...nextItems);
     }
 
     const db = await readyDb();
     const existing = await db
-      .prepare("SELECT id, source_id, source_updated_at FROM products WHERE page_id = ?")
+      .prepare("SELECT id, source_id, source_updated_at, is_active FROM products WHERE page_id = ?")
       .bind(options.pageId)
-      .all<{ id: string; source_id: string; source_updated_at: string | null }>();
+      .all<{ id: string; source_id: string; source_updated_at: string | null; is_active: number }>();
     const bySource = new Map((existing.results ?? []).map((row) => [row.source_id, row]));
 
     const incomingIds = new Set<string>();
+    const statements: D1PreparedStatement[] = [];
     let created = 0;
     let updated = 0;
     let skipped = 0;
     const now = new Date().toISOString();
 
-    for (const item of items) {
+    for (const item of allItems) {
       const mapped = mapUniStoreProduct(item, options.pageId);
+      if (incomingIds.has(mapped.sourceId)) continue;
       incomingIds.add(mapped.sourceId);
       const current = bySource.get(mapped.sourceId);
       const updatedAt = mapped.sourceUpdatedAt ?? now;
 
-      if (current && current.source_updated_at && current.source_updated_at >= updatedAt) {
+      if (current && current.is_active === 1 && current.source_updated_at && current.source_updated_at >= updatedAt) {
         skipped++;
         continue;
       }
 
       if (current) {
-        await db
-          .prepare(
-            `UPDATE products SET name_bn = ?, category = ?, price_bdt = ?, compare_at_price_bdt = ?, stock = ?,
-             offer_text = ?, features_json = ?, problem_bn = ?, solution_bn = ?, tags_json = ?, image_url = ?,
-             enrich_json = ?, is_active = ?, source_updated_at = ? WHERE id = ?`,
-          )
-          .bind(
-            mapped.nameBn,
-            mapped.category,
-            mapped.priceBdt,
-            mapped.compareAtPriceBdt,
-            mapped.stock,
-            mapped.offerText,
-            JSON.stringify(mapped.features),
-            mapped.problemBn,
-            mapped.solutionBn,
-            JSON.stringify(mapped.tags),
-            mapped.imageUrl,
-            JSON.stringify(mapped.enrich),
-            mapped.isActive,
-            updatedAt,
-            current.id,
-          )
-          .run();
+        statements.push(
+          db
+            .prepare(
+              `UPDATE products SET name_bn = ?, category = ?, price_bdt = ?, compare_at_price_bdt = ?, stock = ?,
+               offer_text = ?, features_json = ?, problem_bn = ?, solution_bn = ?, tags_json = ?, image_url = ?,
+               enrich_json = ?, is_active = ?, source_updated_at = ? WHERE id = ?`,
+            )
+            .bind(
+              mapped.nameBn,
+              mapped.category,
+              mapped.priceBdt,
+              mapped.compareAtPriceBdt,
+              mapped.stock,
+              mapped.offerText,
+              JSON.stringify(mapped.features),
+              mapped.problemBn,
+              mapped.solutionBn,
+              JSON.stringify(mapped.tags),
+              mapped.imageUrl,
+              JSON.stringify(mapped.enrich),
+              mapped.isActive,
+              updatedAt,
+              current.id,
+            ),
+        );
         updated++;
       } else {
-        await db
-          .prepare(
-            `INSERT INTO products (id, page_id, source_id, name_bn, category, price_bdt, compare_at_price_bdt, stock,
-             offer_text, features_json, problem_bn, solution_bn, material, target_audience, tags_json, image_url,
-             art_seed, enrich_json, is_active, source_updated_at, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .bind(
-            `prod_${crypto.randomUUID().slice(0, 12)}`,
-            mapped.pageId,
-            mapped.sourceId,
-            mapped.nameBn,
-            mapped.category,
-            mapped.priceBdt,
-            mapped.compareAtPriceBdt,
-            mapped.stock,
-            mapped.offerText,
-            JSON.stringify(mapped.features),
-            mapped.problemBn,
-            mapped.solutionBn,
-            mapped.material,
-            mapped.targetAudience,
-            JSON.stringify(mapped.tags),
-            mapped.imageUrl,
-            mapped.artSeed,
-            JSON.stringify(mapped.enrich),
-            mapped.isActive,
-            updatedAt,
-            now,
-          )
-          .run();
+        statements.push(
+          db
+            .prepare(
+              `INSERT INTO products (id, page_id, source_id, name_bn, category, price_bdt, compare_at_price_bdt, stock,
+               offer_text, features_json, problem_bn, solution_bn, material, target_audience, tags_json, image_url,
+               art_seed, enrich_json, is_active, source_updated_at, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            )
+            .bind(
+              `prod_${crypto.randomUUID().slice(0, 12)}`,
+              mapped.pageId,
+              mapped.sourceId,
+              mapped.nameBn,
+              mapped.category,
+              mapped.priceBdt,
+              mapped.compareAtPriceBdt,
+              mapped.stock,
+              mapped.offerText,
+              JSON.stringify(mapped.features),
+              mapped.problemBn,
+              mapped.solutionBn,
+              mapped.material,
+              mapped.targetAudience,
+              JSON.stringify(mapped.tags),
+              mapped.imageUrl,
+              mapped.artSeed,
+              JSON.stringify(mapped.enrich),
+              mapped.isActive,
+              updatedAt,
+              now,
+            ),
+        );
         created++;
       }
     }
@@ -245,10 +322,15 @@ export async function syncUniStoreCatalog(options: {
     // Products no longer in the catalog get soft-deleted.
     let deactivated = 0;
     for (const [sourceId, row] of bySource) {
-      if (!incomingIds.has(sourceId)) {
-        await db.prepare("UPDATE products SET is_active = 0 WHERE id = ?").bind(row.id).run();
+      if (!incomingIds.has(sourceId) && row.is_active !== 0) {
+        statements.push(db.prepare("UPDATE products SET is_active = 0 WHERE id = ?").bind(row.id));
         deactivated++;
       }
+    }
+
+    // Execute D1 writes in clean batches of 25 statements.
+    for (let i = 0; i < statements.length; i += 25) {
+      await db.batch(statements.slice(i, i + 25));
     }
 
     await db

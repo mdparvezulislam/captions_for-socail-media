@@ -38,27 +38,27 @@ export const RESPONSE_SCHEMA: Record<string, unknown> = {
   properties: {
     image_caption: {
       type: "STRING",
-      description: "ছবির পোস্টের ক্যাপশন — ৪–৫ লাইন, ৪০–৭০ শব্দ, লাইন ভাঙা \\n দিয়ে।",
-      maxLength: 700,
+      description: "লম্বা ফিড পোস্ট ক্যাপশন — হুক + প্রোডাক্টের ইংরেজি নাম + ৩–৫টি «✅ English Label - বাংলা সুবিধা» বুলেট + CTA, লাইন ভাঙা \\n দিয়ে।",
+      maxLength: 900,
     },
     video_caption: {
       type: "OBJECT",
       properties: {
-        hook: { type: "STRING", description: "১ লাইন, ৯০ অক্ষরের কম, স্ক্রল থামায়", maxLength: 120 },
-        body: { type: "STRING", description: "২ লাইন — উপকার ও দাম/অফার", maxLength: 320 },
-        cta: { type: "STRING", description: "শেষ লাইন, কাজ করতে বলো", maxLength: 120 },
+        hook: { type: "STRING", description: "১ লাইন, ৯০ অক্ষরের কম, প্রশ্ন বা হুক যা স্ক্রল থামায়", maxLength: 120 },
+        body: { type: "STRING", description: "১–২ লাইন — প্রোডাক্টের নাম ও মূল সুবিধা (✅ বুলেট সহ)", maxLength: 320 },
+        cta: { type: "STRING", description: "শেষ লাইন — কমেন্ট বা ইনবক্সে অর্ডারের CTA", maxLength: 120 },
       },
       required: ["hook", "body", "cta"],
       propertyOrdering: ["hook", "body", "cta"],
     },
     problem_caption: {
       type: "STRING",
-      description: "সমস্যা → সমাধান → কেন এটাই → দাম → CTA, ৪–৫ লাইন",
+      description: "সমস্যা → সমাধান + প্রোডাক্টের নাম → ২–৩টি ✅ বুলেট → CTA, লাইন ভাঙা \\n দিয়ে।",
       maxLength: 900,
     },
     comment_keyword: {
       type: "STRING",
-      description: "কমেন্ট ট্রিগার কীওয়ার্ড — প্রোডাক্টের সহজ ইংরেজি শব্দ (যেমন Chopper, Fan)",
+      description: "কমেন্ট ট্রিগার কীওয়ার্ড — প্রোডাক্টের সহজ ইংরেজি শব্দ (যেমন Chopper, Fan, Earbuds)",
       maxLength: 20,
     },
     hashtags: {
@@ -81,16 +81,16 @@ export const RESPONSE_SCHEMA: Record<string, unknown> = {
     },
   },
   required: ["image_caption", "video_caption", "problem_caption", "comment_keyword", "hashtags", "poster"],
-  propertyOrdering: ["image_caption", "video_caption", "problem_caption", "hashtags", "poster"],
+  propertyOrdering: ["image_caption", "video_caption", "problem_caption", "comment_keyword", "hashtags", "poster"],
 };
 
-const GOLD_EXAMPLES = `উদাহরণ ১ (রিচার্জেবল ফ্যান, দাম ৳১,২৯০, আগে ৳১,৬৯০):
-ইমেজ: "লোডশেডিং-এ ঘুম ভাঙে? আর নয় 🔥\\nফুল চার্জে ৬–৮ ঘণ্টা বাতাস — বিদ্যুৎ না থাকলেও ঠান্ডা।\\nUSB-C চার্জিং, ৩ স্পিড, মাত্র ৭২০ গ্রাম।\\n💰 ৳১,২৯০ · আগে ৳১,৬৯০ · 📦 ফ্রি ডেলিভারি\\nঅর্ডার করতে ইনবক্স করুন 👇"
+const GOLD_EXAMPLES = `উদাহরণ ১ (রিচার্জেবল মিনি ফ্যান):
+ইমেজ: "লোডশেডিং-এ গরমে ঘুম ভেঙে যাওয়াটা সত্যিই বিরক্তিকর। এই ঝামেলা এড়াতে আমি এখন ব্যবহার করছি Rechargeable Mini Fan।\\n\\n✅ Long Battery Backup - এক চার্জেই ৬–৮ ঘণ্টা টানা বাতাস\\n✅ USB-C Fast Charging - পাওয়ার ব্যাংক বা চার্জার দিয়েই সহজে চার্জ\\n✅ 3 Speed Modes - প্রয়োজনমতো বাতাসের গতি কমানো-বাড়ানো যায়\\n\\nদাম ও অর্ডার লিংক পেতে কমেন্টে 'Fan' লিখুন বা সরাসরি ইনবক্স করুন 👇"
 
-উদাহরণ ২ (রাইস কুকার, দাম ৳২,৪৫০):
-প্রবলেম: "গ্যাসের দাম বাড়ছে, প্রতিবার ভাত রান্নায় ঝামেলা।\\nসমাধান: একবার সেট করলেই ভাত, খিচুড়ি, স্টিম — বিদ্যুৎ খরচ কম।\\nনন-স্টিক পট, তাই ধোয়াও সহজ।\\nআজ ৳২,৪৫০-এ, ২ বছরের ওয়ারেন্টি।\\nঅর্ডার করতে মেসেজ দিন 📩"
+উদাহরণ ২ (রাইস কুকার):
+প্রবলেম: "গ্যাসের চাপ কমে গেলে প্রতিবেলা রান্নায় বাড়তি সময় আর ঝামেলা পোহাতে হয়।\\n\\nসমাধান: এক সুইচেই ঝরঝরে ভাত, খিচুড়ি আর স্টিম — Electric Rice Cooker 1.8L।\\n\\n✅ Non-Stick Pot - তলায় লাগে না, ধোয়াও একদম সহজ\\n✅ Auto Keep Warm - রান্নার পর খাবার দীর্ঘক্ষণ গরম থাকে\\n\\nঅর্ডার করতে কমেন্টে 'Cooker' লিখুন অথবা ইনবক্স করুন 📩"
 
-(উপরের উদাহরণ — হুবহু কপি করবে না, স্টাইল বুঝে নাও।)`;
+(উপরের উদাহরণ — হুবহু কপি করবে না, স্টাইল ও কাঠামো বুঝে নাও।)`;
 
 function productFacts(product: Product): string {
   return JSON.stringify(

@@ -17,24 +17,36 @@ export async function POST(request: Request) {
   }
 
   const started = Date.now();
-
-  // Sync the live store catalog first (failures are non-fatal — demo/seed data still generates).
-  let sync: { ok: boolean; created: number; updated: number; skipped: number; deactivated: number; error?: string } | null = null;
+  const url = new URL(request.url);
+  let body: { page?: string; skipSync?: boolean; count?: number } = {};
   try {
-    const storePage = await getPageBySlug("unique-store-bd");
-    if (storePage) {
-      sync = await syncUniStoreCatalog({ pageId: storePage.id });
+    body = (await request.json()) as { page?: string; skipSync?: boolean; count?: number };
+  } catch {
+    /* empty body allowed */
+  }
+  const targetSlug = body.page ?? url.searchParams.get("page") ?? undefined;
+  const skipSync = body.skipSync === true || url.searchParams.get("skipSync") === "1";
+
+  // Sync the live store catalog first (failures are non-fatal — existing data still generates).
+  let sync: { ok: boolean; created: number; updated: number; skipped: number; deactivated: number; error?: string } | null = null;
+  if (!skipSync) {
+    try {
+      const storePage = await getPageBySlug("unique-store-bd");
+      if (storePage) {
+        sync = await syncUniStoreCatalog({ pageId: storePage.id });
+      }
+    } catch (error) {
+      sync = { ok: false, created: 0, updated: 0, skipped: 0, deactivated: 0, error: error instanceof Error ? error.message : String(error) };
     }
-  } catch (error) {
-    sync = { ok: false, created: 0, updated: 0, skipped: 0, deactivated: 0, error: error instanceof Error ? error.message : String(error) };
   }
 
-  const pages = await listPages();
+  const allPages = await listPages();
+  const pages = targetSlug ? allPages.filter((p) => p.slug === targetSlug) : allPages;
   const results: { page: string; created: number; batch?: number; message?: string }[] = [];
 
   for (const page of pages) {
     try {
-      const outcome = await generateBatch(page);
+      const outcome = await generateBatch(page, body.count);
       results.push({ page: page.slug, created: outcome.created, batch: outcome.batch, message: outcome.message });
     } catch (error) {
       results.push({

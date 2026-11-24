@@ -57,7 +57,8 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "page and products[] required" }, { status: 400 });
   }
 
-  const page = await getPageBySlug(payload.page);
+  const targetSlug = payload.page === "store" ? "unique-store-bd" : payload.page;
+  const page = await getPageBySlug(targetSlug);
   if (!page) return Response.json({ ok: false, error: "page not found" }, { status: 404 });
 
   await readyDb();
@@ -76,8 +77,8 @@ export async function POST(request: Request) {
     if (item.deleted) {
       if (existing) {
         await database
-          .prepare("UPDATE products SET is_active = 0, deleted_at = ? WHERE id = ?")
-          .bind(now, existing.id)
+          .prepare("UPDATE products SET is_active = 0, source_updated_at = ? WHERE id = ?")
+          .bind(item.updated_at ?? now, existing.id)
           .run();
         updated++;
       }
@@ -93,7 +94,7 @@ export async function POST(request: Request) {
         .prepare(
           `UPDATE products SET name_bn = ?, category = ?, price_bdt = ?, compare_at_price_bdt = ?, stock = ?,
            offer_text = ?, features_json = ?, problem_bn = ?, solution_bn = ?, material = ?, target_audience = ?,
-           tags_json = ?, image_url = ?, is_active = ?, source_updated_at = ?, synced_at = ? WHERE id = ?`,
+           tags_json = ?, image_url = ?, is_active = ?, source_updated_at = ? WHERE id = ?`,
         )
         .bind(
           item.name_bn,
@@ -111,7 +112,6 @@ export async function POST(request: Request) {
           item.image_url ?? null,
           item.is_active === false ? 0 : 1,
           item.updated_at ?? now,
-          now,
           existing.id,
         )
         .run();
@@ -121,8 +121,8 @@ export async function POST(request: Request) {
         .prepare(
           `INSERT INTO products (id, page_id, source_id, name_bn, category, price_bdt, compare_at_price_bdt, stock,
            offer_text, features_json, problem_bn, solution_bn, material, target_audience, tags_json, image_url,
-           art_seed, is_active, source_updated_at, synced_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           art_seed, is_active, source_updated_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           id("prod"),
@@ -144,7 +144,6 @@ export async function POST(request: Request) {
           artSeed,
           item.is_active === false ? 0 : 1,
           item.updated_at ?? now,
-          now,
           now,
         )
         .run();

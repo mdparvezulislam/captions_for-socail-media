@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { syncUniStoreCatalog } from "@/lib/sync";
 import { db, readyDb } from "@/lib/db";
 import { getCaption, getPageById, getPageBySlug, getProduct } from "@/lib/data";
-import { ensureProductCaptions, generateBatch, markPosted, regenerateOne, saveBody } from "@/lib/captions";
+import { ensureProductCaptions, generateBatch, markPosted, pickBatchProducts, regenerateOne, saveBody } from "@/lib/captions";
 import { getSession } from "@/lib/session";
 import type { BrandKit } from "@/lib/types";
 
@@ -12,6 +12,22 @@ const REVALIDATE = ["/today", "/library", "/products", "/pages"];
 
 function refreshAll(): void {
   for (const path of REVALIDATE) revalidatePath(path);
+}
+
+export async function pickBatchAction(
+  pageSlug: string,
+  count?: number,
+): Promise<{
+  ok: boolean;
+  batch?: number;
+  runId?: string;
+  relaxed?: boolean;
+  products: { id: string; nameBn: string; score: number }[];
+  message?: string;
+}> {
+  const page = await getPageBySlug(pageSlug);
+  if (!page) return { ok: false, products: [], message: "পেজ পাওয়া যায়নি" };
+  return pickBatchProducts(page, count);
 }
 
 export async function generateBatchAction(pageSlug: string): Promise<{
@@ -30,13 +46,21 @@ export async function generateBatchAction(pageSlug: string): Promise<{
 
 export async function generateForProductAction(
   productId: string,
+  force = false,
+  meta?: { batch?: number; position?: number; runId?: string; score?: number },
 ): Promise<{ ok: boolean; message?: string }> {
   const product = await getProduct(productId);
   if (!product) return { ok: false, message: "প্রোডাক্ট পাওয়া যায়নি" };
   const page = await getPageById(product.pageId);
   if (!page) return { ok: false, message: "পেজ পাওয়া যায়নি" };
   try {
-    await ensureProductCaptions(page, product);
+    await ensureProductCaptions(page, product, {
+      force,
+      batch: meta?.batch,
+      position: meta?.position,
+      runId: meta?.runId,
+      score: meta?.score,
+    });
     refreshAll();
     revalidatePath(`/products/${productId}`);
     return { ok: true };

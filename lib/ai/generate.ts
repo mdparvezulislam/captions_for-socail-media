@@ -34,27 +34,58 @@ export interface GenerateInput {
 
 const ANGLES: Angle[] = ["benefit", "emotional", "urgency"];
 
-const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
+// Ordered so flagship Flash runs first when quota is available, and high-capacity
+// Flash-Lite models run at the tail (so a dead 429 flagship never masks a retryable 503).
+const FALLBACK_MODELS = [
+  "gemini-3.8-flash",
+  "gemini-3.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-flash-lite-latest",
+  "gemini-3.1-flash-lite",
+];
+
+// Per-isolate cooldown for models whose daily quota is exhausted or deprecated (5 min TTL).
+const COOLDOWN_MS = 5 * 60 * 1000;
+const modelCooldownUntil = new Map<string, number>();
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** High-demand 503s are transient — retry with backoff, then fall back to a stable model. */
+/**
+ * Smart multi-model fallback:
+ * - Immediately advances on 429 daily-quota exhaustion or 404 deprecated model (and cools down for 5 min)
+ * - Retries transient 503 high-demand spikes briefly before falling over to the next Gemini model
+ */
 async function callWithFallback(
   params: Omit<Parameters<typeof callGemini>[0], "model">,
   primaryModel: string,
 ): Promise<{ response: Awaited<ReturnType<typeof callGemini>>; model: string }> {
-  const chain = [primaryModel, ...FALLBACK_MODELS.filter((model) => model !== primaryModel)];
+  const fullChain = [primaryModel, ...FALLBACK_MODELS.filter((model) => model !== primaryModel)];
+  const now = Date.now();
+  const activeChain = fullChain.filter((model) => (modelCooldownUntil.get(model) ?? 0) <= now);
+  const chain = activeChain.length > 0 ? activeChain : ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", primaryModel];
   let lastError: GeminiError | null = null;
 
   for (const model of chain) {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    const isFastLite = model === "gemini-3.5-flash-lite" || model === "gemini-flash-lite-latest";
+    const maxAttempts = isFastLite ? 3 : 1;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
         const response = await callGemini({ ...params, model });
+        modelCooldownUntil.delete(model);
         return { response, model };
       } catch (error) {
-        if (!(error instanceof GeminiError) || !error.retryable) throw error;
+        if (!(error instanceof GeminiError)) throw error;
         lastError = error;
-        await sleep(1200 * (attempt + 1));
+
+        if (error.quotaExhausted || error.notFound) {
+          modelCooldownUntil.set(model, Date.now() + COOLDOWN_MS);
+          break; // skip immediately to next model — retrying won't help
+        }
+
+        if (!error.retryable) throw error;
+        if (attempt + 1 < maxAttempts) {
+          await sleep(600 + Math.floor(Math.random() * 400));
+        }
       }
     }
   }

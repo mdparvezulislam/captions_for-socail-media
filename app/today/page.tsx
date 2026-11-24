@@ -4,6 +4,7 @@ import { ModeratorTaskGrid } from "@/components/today/moderator-task-grid";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty";
 import { IconAlert, IconClock, IconSpark } from "@/components/ui/icons";
+import { isLiveAiAvailable } from "@/lib/captions";
 import { getPageStats, listPages, listTaskProducts } from "@/lib/data";
 import { bn, bnFullDate, dhakaDate } from "@/lib/format";
 import { requireSession } from "@/lib/session";
@@ -32,7 +33,7 @@ export default async function TodayPage({
   const [tasks, stats] = await Promise.all([listTaskProducts(active.id, date), getPageStats(active.id, date)]);
   const readyCount = tasks.filter((task) => task.hasCaptionsToday).length;
   const remaining = tasks.length - readyCount;
-  const demoMode = tasks.every((task) => !task.hasCaptionsToday);
+  const demoMode = !isLiveAiAvailable();
 
   return (
     <div className="flex flex-col gap-5">

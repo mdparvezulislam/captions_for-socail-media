@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { IconRefresh } from "@/components/ui/icons";
+import { showToast } from "@/components/ui/toast";
 import { syncUniStoreAction } from "@/app/actions";
 
 export function SyncButton({ pageSlug }: { pageSlug: string }) {
@@ -21,6 +22,7 @@ export function SyncButton({ pageSlug }: { pageSlug: string }) {
           startTransition(async () => {
             const result = await syncUniStoreAction(pageSlug);
             setMessage(result.message);
+            showToast(result.message, result.ok ? "success" : "error", result.ok ? 3200 : 4500);
             router.refresh();
             setTimeout(() => setMessage(null), 6000);
           })

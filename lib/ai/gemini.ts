@@ -20,12 +20,19 @@ export interface GeminiResponse {
 export class GeminiError extends Error {
   status?: number;
   retryable: boolean;
+  quotaExhausted: boolean;
+  notFound: boolean;
 
-  constructor(message: string, options: { status?: number; retryable?: boolean } = {}) {
+  constructor(
+    message: string,
+    options: { status?: number; retryable?: boolean; quotaExhausted?: boolean; notFound?: boolean } = {},
+  ) {
     super(message);
     this.name = "GeminiError";
     this.status = options.status;
     this.retryable = options.retryable ?? false;
+    this.quotaExhausted = options.quotaExhausted ?? false;
+    this.notFound = options.notFound ?? false;
   }
 }
 
@@ -43,10 +50,10 @@ export async function callGemini(request: GeminiRequest): Promise<GeminiResponse
   const started = Date.now();
 
   const generationConfig: Record<string, unknown> = {
-    temperature: request.temperature ?? 0.9,
+    temperature: request.temperature ?? 0.85,
     responseMimeType: "application/json",
     responseSchema: request.schema,
-    maxOutputTokens: 2000,
+    maxOutputTokens: 2800,
   };
   // 2.5-এর "thinking" ডিফল্ট চালু — সেটাই maxOutputTokens খেয়ে JSON কেটে দেয়। ক্যাপশনে দরকার নেই।
   if (model.startsWith("gemini-2.5")) {
@@ -66,20 +73,26 @@ export async function callGemini(request: GeminiRequest): Promise<GeminiResponse
         systemInstruction: { parts: [{ text: request.system }] },
         generationConfig,
       }),
-      signal: AbortSignal.timeout(request.timeoutMs ?? 45_000),
+      signal: AbortSignal.timeout(request.timeoutMs ?? 16_000),
     });
   } catch (error) {
     const timedOut = error instanceof DOMException && error.name === "TimeoutError";
-    throw new GeminiError(timedOut ? "Gemini অনুরোধ সময় শেষ (৪৫s)" : `Gemini অনুরোধ ব্যর্থ: ${String(error)}`, {
+    throw new GeminiError(timedOut ? "Gemini অনুরোধ সময় শেষ (১৬s)" : `Gemini অনুরোধ ব্যর্থ: ${String(error)}`, {
       retryable: true,
     });
   }
 
   if (!response.ok) {
-    const detail = (await response.text().catch(() => "")).slice(0, 400);
+    const detail = (await response.text().catch(() => "")).slice(0, 500);
+    const isDailyQuota =
+      response.status === 429 &&
+      /PerDay|GenerateRequestsPerDay|exceeded your current quota/i.test(detail);
+    const isNotFound = response.status === 404;
     throw new GeminiError(`Gemini HTTP ${response.status}: ${detail}`, {
       status: response.status,
-      retryable: response.status === 429 || response.status >= 500,
+      retryable: response.status === 429 || response.status >= 500 || isNotFound,
+      quotaExhausted: isDailyQuota,
+      notFound: isNotFound,
     });
   }
 
@@ -89,14 +102,15 @@ export async function callGemini(request: GeminiRequest): Promise<GeminiResponse
   }
 
   const candidate = payload.candidates[0];
-  const text = (candidate.content?.parts ?? [])
+  const rawText = (candidate.content?.parts ?? [])
     .map((part) => part.text ?? "")
     .join("")
     .trim();
+  const text = rawText.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 
   if (!text) {
     throw new GeminiError(`Gemini খালি উত্তর দিয়েছে (finishReason: ${candidate.finishReason ?? "unknown"})`, {
-      retryable: false,
+      retryable: true,
     });
   }
 

@@ -42,7 +42,7 @@ export function CopyButton({
       document.body.removeChild(area);
     }
     setCopied(true);
-    showToast(copiedLabel === "কপি হয়েছে" ? "✓ ক্লিপবোর্ডে কপি সম্পন্ন!" : `✓ ${copiedLabel}`);
+    showToast(copiedLabel === "কপি হয়েছে" ? "ক্লিপবোর্ডে কপি সম্পন্ন!" : copiedLabel);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), 1600);
   }, [copiedLabel, text]);

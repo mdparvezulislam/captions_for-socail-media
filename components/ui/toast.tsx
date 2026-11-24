@@ -73,7 +73,7 @@ export function ToastHost() {
       role="status"
       aria-live="polite"
       className={cn(
-        "pointer-events-none fixed bottom-6 left-1/2 z-[100] -translate-x-1/2 transition-all duration-300 ease-out",
+        "pointer-events-none fixed bottom-20 left-1/2 z-[100] -translate-x-1/2 transition-all duration-300 ease-out lg:bottom-6",
         visible
           ? "translate-y-0 opacity-100 scale-100"
           : "translate-y-3 opacity-0 scale-95",

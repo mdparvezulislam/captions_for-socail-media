@@ -176,7 +176,7 @@ export function CaptionWorkspaceDrawer({
       if (result.ok && result.body) {
         setCaptions((prev) => prev.map((item) => (item.id === caption.id ? { ...item, body: result.body! } : item)));
         setNotice("নতুন করে লেখা হয়েছে");
-        showToast("✓ নতুন করে লেখা সম্পন্ন!");
+        showToast("নতুন করে লেখা সম্পন্ন!");
       } else {
         setNotice(result.message ?? "রিরাইট করা যায়নি");
         showToast(result.message ?? "রিরাইট করা যায়নি", "error");
@@ -191,7 +191,7 @@ export function CaptionWorkspaceDrawer({
       if (result.ok) {
         setCaptions((prev) => prev.map((item) => (item.id === caption.id ? { ...item, body, status: "edited" } : item)));
         setNotice("সেভ হয়েছে");
-        showToast("✓ এডিট করা ক্যাপশন সেভ হয়েছে");
+        showToast("এডিট করা ক্যাপশন সেভ হয়েছে");
       }
       setTimeout(() => setNotice(null), 1800);
     });
@@ -204,7 +204,7 @@ export function CaptionWorkspaceDrawer({
         setCaptions((prev) =>
           prev.map((item) => (item.id === caption.id ? { ...item, status: posted ? "posted" : "ready" } : item)),
         );
-        showToast(posted ? "✓ পোস্ট হিসেবে চিহ্নিত করা হয়েছে" : "পোস্টের চিহ্ন সরানো হয়েছে");
+        showToast(posted ? "পোস্ট হিসেবে চিহ্নিত করা হয়েছে" : "পোস্টের চিহ্ন সরানো হয়েছে");
         router.refresh();
       }
     });
@@ -212,15 +212,16 @@ export function CaptionWorkspaceDrawer({
 
   function generateAll() {
     if (!data) return;
+    const isRegenerateAll = captions.length >= 3;
     startTransition(async () => {
-      const result = await generateForProductAction(data.product.id);
+      const result = await generateForProductAction(data.product.id, isRegenerateAll);
       if (result.ok) {
         await load(data.product.id);
-        showToast("✓ ৩টি ক্যাপশন তৈরি সম্পন্ন!");
+        showToast(isRegenerateAll ? "৩টি ক্যাপশন নতুন করে তৈরি সম্পন্ন!" : "৩টি ক্যাপশন তৈরি সম্পন্ন!");
         router.refresh();
       } else {
         setNotice(result.message ?? "তৈরি করা যায়নি");
-        showToast(result.message ?? "তৈরি করা যায়নি", "error");
+        showToast(result.message ?? "তৈরি করা যায়নি", "error", 4000);
         setTimeout(() => setNotice(null), 2600);
       }
     });

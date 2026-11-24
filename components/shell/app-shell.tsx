@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Page, Session } from "@/lib/types";
 import { initials } from "@/lib/format";
 import { NavLink } from "@/components/shell/nav-link";
+import { QuickSearch } from "@/components/shell/quick-search-modal";
 import {
   IconBox,
   IconLayers,
@@ -57,7 +58,11 @@ export function AppShell({
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line/80 px-4 py-6 lg:flex">
         <Brand />
 
-        <nav className="mt-7 flex flex-col gap-1">
+        <div className="mt-6">
+          <QuickSearch />
+        </div>
+
+        <nav className="mt-4 flex flex-col gap-1">
           {NAV.map((item) => (
             <NavLink key={item.href} href={item.href} icon={item.icon}>
               {item.label}
@@ -109,13 +114,16 @@ export function AppShell({
       <div className="flex min-h-dvh flex-col">
         <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line/70 bg-paper/85 px-4 py-3 backdrop-blur-md lg:hidden">
           <Brand />
-          <Link
-            href="/settings"
+          <div className="flex items-center gap-2">
+            <QuickSearch />
+            <Link
+              href="/settings"
             aria-label="সেটিংস"
             className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-line bg-card text-ink-soft"
-          >
-            <IconSettings size={17} />
-          </Link>
+            >
+              <IconSettings size={17} />
+            </Link>
+          </div>
         </header>
 
         <main className="flex-1 px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-16 lg:pt-9">

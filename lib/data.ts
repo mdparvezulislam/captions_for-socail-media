@@ -1,4 +1,5 @@
 import { readyDb } from "@/lib/db";
+import { scoreProduct } from "@/lib/selection";
 import type {
   BatchInfo,
   BrandKit,
@@ -350,6 +351,152 @@ export async function getGeneratingState(pageId: string, date: string): Promise<
     .bind(pageId, new Date(Date.now() - 3 * 60_000).toISOString())
     .first<{ n: number }>();
   return num(row?.n);
+}
+
+export interface TaskProduct {
+  product: Product;
+  percent: number;
+  hasCaptionsToday: boolean;
+  types: CaptionType[];
+  lastUsedDate: string | null;
+  recent: boolean;
+}
+
+/** Full catalogue with caption status + selection score — the moderator task grid. */
+export async function listTaskProducts(pageId: string, date: string): Promise<TaskProduct[]> {
+  const db = await readyDb();
+  const productResponse = await db
+    .prepare("SELECT * FROM products WHERE page_id = ? AND is_active = 1")
+    .bind(pageId)
+    .all<Row>();
+  const todayResponse = await db
+    .prepare("SELECT product_id, type FROM captions WHERE page_id = ? AND run_date = ?")
+    .bind(pageId, date)
+    .all<{ product_id: string; type: string }>();
+  const lastResponse = await db
+    .prepare("SELECT product_id, MAX(run_date) AS last_date FROM captions WHERE page_id = ? GROUP BY product_id")
+    .bind(pageId)
+    .all<{ product_id: string; last_date: string }>();
+
+  const typesByProduct = new Map<string, CaptionType[]>();
+  for (const row of todayResponse.results ?? []) {
+    const list = typesByProduct.get(row.product_id) ?? [];
+    if (row.type === "image" || row.type === "video" || row.type === "problem") list.push(row.type);
+    typesByProduct.set(row.product_id, list);
+  }
+  const lastUsed = new Map<string, string>();
+  for (const row of lastResponse.results ?? []) {
+    if (row.last_date) lastUsed.set(row.product_id, row.last_date);
+  }
+
+  const products = (productResponse.results ?? []).map(mapProduct);
+  const tasks: TaskProduct[] = products.map((product) => {
+    const scored = scoreProduct(product, lastUsed.get(product.id) ?? null, date);
+    const lastUsedDate = lastUsed.get(product.id) ?? null;
+    const recent = lastUsedDate
+      ? (new Date(`${date}T00:00:00Z`).getTime() - new Date(`${lastUsedDate}T00:00:00Z`).getTime()) / 864e5 <= 7
+      : false;
+    return {
+      product,
+      percent: Math.round(scored.score * 100),
+      hasCaptionsToday: typesByProduct.has(product.id),
+      types: typesByProduct.get(product.id) ?? [],
+      lastUsedDate,
+      recent,
+    };
+  });
+
+  // বাকি আগে → স্কোর desc → ডিটারমিনিস্টিক টাই-ব্রেক
+  tasks.sort((a, b) => {
+    if (a.hasCaptionsToday !== b.hasCaptionsToday) return a.hasCaptionsToday ? 1 : -1;
+    if (b.percent !== a.percent) return b.percent - a.percent;
+    return a.product.id.localeCompare(b.product.id);
+  });
+  return tasks;
+}
+
+export interface StudioData {
+  product: Product;
+  page: Page;
+  captions: Caption[];
+  position: number;
+  total: number;
+  prevId: string | null;
+  nextId: string | null;
+  percent: number;
+  lastUsedDate: string | null;
+}
+
+/** Everything the instant caption studio drawer needs, in one read. */
+export async function getStudioData(productId: string, date: string): Promise<StudioData | null> {
+  const product = await getProduct(productId);
+  if (!product) return null;
+  const [page, tasks, captionRows] = await Promise.all([
+    getPageById(product.pageId),
+    listTaskProducts(product.pageId, date),
+    (async () => {
+      const db = await readyDb();
+      const { results } = await db
+        .prepare(
+          `SELECT * FROM captions WHERE product_id = ? AND run_date = ?
+           ORDER BY batch DESC, position ASC,
+           CASE type WHEN 'image' THEN 1 WHEN 'video' THEN 2 ELSE 3 END ASC`,
+        )
+        .bind(productId, date)
+        .all<Row>();
+      return (results ?? []).map(mapCaption);
+    })(),
+  ]);
+  if (!page) return null;
+
+  const index = tasks.findIndex((task) => task.product.id === productId);
+  const prevTask = index > 0 ? tasks[index - 1] : null;
+  const nextTask = index >= 0 && index < tasks.length - 1 ? tasks[index + 1] : null;
+  const task = tasks[index];
+  return {
+    product,
+    page,
+    captions: captionRows,
+    position: index + 1,
+    total: tasks.length,
+    prevId: prevTask?.product.id ?? null,
+    nextId: nextTask?.product.id ?? null,
+    percent: task?.percent ?? 0,
+    lastUsedDate: task?.lastUsedDate ?? null,
+  };
+}
+
+export interface SearchResult {
+  id: string;
+  name: string;
+  price: number;
+  pageName: string;
+  pageSlug: string;
+  category: string;
+}
+
+export async function searchProducts(query: string, limit = 8): Promise<SearchResult[]> {
+  const db = await readyDb();
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+  const like = `%${trimmed}%`;
+  const { results } = await db
+    .prepare(
+      `SELECT p.id, p.name_bn, p.price_bdt, p.category, pg.name AS page_name, pg.slug AS page_slug
+       FROM products p JOIN pages pg ON pg.id = p.page_id
+       WHERE p.is_active = 1 AND (p.name_bn LIKE ? OR p.category LIKE ? OR p.problem_bn LIKE ? OR p.source_id LIKE ?)
+       ORDER BY p.name_bn LIMIT ?`,
+    )
+    .bind(like, like, like, like, limit)
+    .all<Row>();
+  return (results ?? []).map((row) => ({
+    id: str(row.id),
+    name: str(row.name_bn),
+    price: num(row.price_bdt),
+    pageName: str(row.page_name),
+    pageSlug: str(row.page_slug),
+    category: str(row.category),
+  }));
 }
 
 export async function listProductCaptions(productId: string, limit = 30): Promise<Caption[]> {

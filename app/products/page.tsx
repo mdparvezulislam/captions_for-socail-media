@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PageTabs } from "@/components/shell/page-tabs";
+import { SyncButton } from "@/components/products/sync-button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty";
 import { IconArrowUpRight, IconSearch } from "@/components/ui/icons";
@@ -37,7 +38,10 @@ export default async function ProductsPage({
               যেকোনো প্রোডাক্টে ক্লিক করে এখনই ক্যাপশন তৈরি করতে পারেন — ব্যাচের জন্য অপেক্ষা করতে হবে না।
             </p>
           </div>
-          <Badge tone="moss">{bn(stats.fresh)}টি অপেক্ষায়</Badge>
+          <div className="flex flex-col items-end gap-2">
+            <Badge tone="moss">{bn(stats.fresh)}টি অপেক্ষায়</Badge>
+            <SyncButton pageSlug={active.slug} />
+          </div>
         </div>
         <div className="mt-4">
           <PageTabs pages={pages} activeSlug={active.slug} basePath="/products" />

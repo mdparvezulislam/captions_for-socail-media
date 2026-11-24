@@ -104,6 +104,7 @@ export function CaptionWorkspaceDrawer({
   const [pending, startTransition] = useTransition();
   const [includeHashtags, setIncludeHashtags] = useState(true);
   const [facebookBold, setFacebookBold] = useState(true);
+  const [groupMode, setGroupMode] = useState(false);
   const [gallery, setGallery] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [captions, setCaptions] = useState<Caption[]>([]);
@@ -156,7 +157,16 @@ export function CaptionWorkspaceDrawer({
   function copyText(body: string): string {
     const page = data?.page;
     const tags = includeHashtags && page && page.hashtags.length > 0 ? page.hashtags : [];
-    const raw = tags.length > 0 ? `${body}\n\n${tags.join(" ")}` : body;
+    let raw = tags.length > 0 ? `${body}\n\n${tags.join(" ")}` : body;
+    if (groupMode) {
+      const product = data?.product;
+      const parts = [raw];
+      if (product?.enrich?.orderUrl) parts.push(`🛒 অর্ডার লিংক: ${product.enrich.orderUrl}`);
+      if (product?.enrich?.whatsapp) parts.push(`📞 হটলাইন / WhatsApp: ${product.enrich.whatsapp}`);
+      parts.push("🚚 ঢাকায় ৳৬০ · ঢাকার বাইরে ৳১২০ · ১০০% ক্যাশ অন ডেলিভারি");
+      if (product?.enrich?.warranty) parts.push(`🛡️ ${product.enrich.warranty}`);
+      raw = parts.join("\n");
+    }
     return formatForFacebook(raw, { bold: facebookBold });
   }
 
@@ -388,6 +398,21 @@ export function CaptionWorkspaceDrawer({
                   </span>
                   𝗙acebook বোল্ড
                 </label>
+                <div className="flex overflow-hidden rounded-full border border-line" role="group" aria-label="কপি মোড">
+                  {(["page", "group"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setGroupMode(mode === "group")}
+                      className={cn(
+                        "px-3 py-1 text-[11.5px] font-[560] transition-colors",
+                        (mode === "group") === groupMode ? "bg-ink text-[#FFFDF8]" : "bg-card text-ink-soft",
+                      )}
+                    >
+                      {mode === "page" ? "পেজ" : "গ্রুপ"}
+                    </button>
+                  ))}
+                </div>
                 <Button
                   size="sm"
                   variant="quiet"

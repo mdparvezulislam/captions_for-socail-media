@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { syncUniStoreCatalog } from "@/lib/sync";
 import { db, readyDb } from "@/lib/db";
 import { getCaption, getPageById, getPageBySlug, getProduct } from "@/lib/data";
 import { ensureProductCaptions, generateBatch, markPosted, regenerateOne, saveBody } from "@/lib/captions";
@@ -74,6 +75,26 @@ export async function markPostedAction(captionId: string, posted: boolean): Prom
   await markPosted(captionId, posted, session.email);
   refreshAll();
   return { ok: true };
+}
+
+export async function syncUniStoreAction(pageSlug: string): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  const session = await getSession();
+  if (session.role === "moderator") return { ok: false, message: "শুধু অ্যাডমিন সিঙ্ক করতে পারেন" };
+
+  const page = await getPageBySlug(pageSlug);
+  if (!page) return { ok: false, message: "পেজ পাওয়া যায়নি" };
+
+  const result = await syncUniStoreCatalog({ pageId: page.id });
+  revalidatePath("/products");
+  revalidatePath("/today");
+  if (!result.ok) return { ok: false, message: `সিঙ্ক ব্যর্থ: ${result.error}` };
+  return {
+    ok: true,
+    message: `সিঙ্ক সম্পন্ন — নতুন ${result.created}, আপডেট ${result.updated}, অপরিবর্তিত ${result.skipped}`,
+  };
 }
 
 export async function updatePageAction(formData: FormData): Promise<{ ok: boolean; message?: string }> {

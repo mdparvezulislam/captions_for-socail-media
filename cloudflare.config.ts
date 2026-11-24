@@ -6,6 +6,7 @@ export default defineConfig({
     entrypoint: "vinext/server/fetch-handler",
     compatibilityDate: "2026-11-24",
     compatibilityFlags: ["nodejs_compat"],
+    domains: ["c.uniquestorebd.top"],
     assets: {
       htmlHandling: "none",
       notFoundHandling: "none",

@@ -33,6 +33,9 @@ export interface ProductEnrich {
   nameEn?: string;
   keyword?: string;
   featureLabels?: string[];
+  orderUrl?: string;
+  whatsapp?: string;
+  warranty?: string;
 }
 
 export interface Product {

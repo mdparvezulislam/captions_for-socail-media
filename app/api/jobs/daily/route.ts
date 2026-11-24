@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { generateBatch } from "@/lib/captions";
-import { listPages } from "@/lib/data";
+import { getPageBySlug, listPages } from "@/lib/data";
+import { syncUniStoreCatalog } from "@/lib/sync";
 
 /**
  * Called by the cron Worker every morning at 07:00 Asia/Dhaka (01:00 UTC).
@@ -16,6 +17,18 @@ export async function POST(request: Request) {
   }
 
   const started = Date.now();
+
+  // Sync the live store catalog first (failures are non-fatal — demo/seed data still generates).
+  let sync: { ok: boolean; created: number; updated: number; skipped: number; deactivated: number; error?: string } | null = null;
+  try {
+    const storePage = await getPageBySlug("unique-store-bd");
+    if (storePage) {
+      sync = await syncUniStoreCatalog({ pageId: storePage.id });
+    }
+  } catch (error) {
+    sync = { ok: false, created: 0, updated: 0, skipped: 0, deactivated: 0, error: error instanceof Error ? error.message : String(error) };
+  }
+
   const pages = await listPages();
   const results: { page: string; created: number; batch?: number; message?: string }[] = [];
 
@@ -34,6 +47,7 @@ export async function POST(request: Request) {
 
   return Response.json({
     ok: results.some((result) => result.created > 0),
+    sync,
     pages: results,
     durationMs: Date.now() - started,
     at: new Date().toISOString(),

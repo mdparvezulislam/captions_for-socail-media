@@ -3,12 +3,12 @@ import { notFound } from "next/navigation";
 import { GenerateForProduct } from "@/components/products/generate-for-product";
 import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/ui/copy-button";
+import { ProductGallery } from "@/components/ui/product-gallery";
 import { IconPoster } from "@/components/ui/icons";
 import { getPageById, getProduct, getProductLastUsed, listProductCaptions } from "@/lib/data";
-import { captionCopyText } from "@/lib/facebook-text";
+import { captionCopyText, imageSrcFor, productGallerySources } from "@/lib/facebook-text";
 import { bn, bnDate, bnRelative, discountPercent, taka } from "@/lib/format";
 import { CAPTION_TYPES } from "@/lib/types";
-import { imageSrcFor } from "@/lib/facebook-text";
 import { requireSession } from "@/lib/session";
 import { cn } from "@/lib/cn";
 
@@ -74,6 +74,12 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           </div>
         </div>
       </header>
+
+      <ProductGallery
+        sources={productGallerySources(product)}
+        productName={product.nameBn}
+        sourceId={product.sourceId}
+      />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
         <section className="card-surface p-5">

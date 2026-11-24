@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { IconDownload, IconImage } from "@/components/ui/icons";
 import { showToast } from "@/components/ui/toast";
 import { drawPoster, loadImageElement, posterSize, type PosterData, type PosterRatio, type PosterTemplate } from "@/lib/poster";
+import { bn } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 const RATIOS: { value: PosterRatio; label: string; hint: string }[] = [
@@ -14,20 +15,58 @@ const RATIOS: { value: PosterRatio; label: string; hint: string }[] = [
 ];
 
 const TEMPLATES: { value: PosterTemplate; label: string }[] = [
+  { value: "viral", label: "🔥 ভাইরাল অ্যাড" },
   { value: "editorial", label: "এডিটোরিয়াল" },
   { value: "bold", label: "বোল্ড" },
   { value: "minimal", label: "মিনিমাল" },
 ];
 
-export function PosterStudio({ data, imageUrl }: { data: PosterData; imageUrl?: string | null }) {
+export function PosterStudio({
+  data,
+  imageUrl,
+  gallerySources,
+  compact = false,
+}: {
+  data: PosterData;
+  imageUrl?: string | null;
+  gallerySources?: string[];
+  compact?: boolean;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const allSources = useMemo(() => {
+    const list: string[] = [];
+    if (imageUrl) list.push(imageUrl);
+    for (const s of gallerySources ?? []) {
+      if (s && !list.includes(s)) list.push(s);
+    }
+    return list;
+  }, [gallerySources, imageUrl]);
+
+  const [selectedIdx, setSelectedIdx] = useState(0);
   const [ratio, setRatio] = useState<PosterRatio>(data.ratio);
   const [template, setTemplate] = useState<PosterTemplate>(data.template);
+  const [headline, setHeadline] = useState(data.headline);
+  const [subline, setSubline] = useState(data.subline);
+  const [badge, setBadge] = useState(data.badge);
+  const [cta, setCta] = useState(data.cta);
   const [ready, setReady] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [productImage, setProductImage] = useState<HTMLImageElement | null>(null);
 
-  const current: PosterData = useMemo(() => ({ ...data, ratio, template }), [data, ratio, template]);
+  const activeImageUrl = allSources[selectedIdx] ?? null;
+
+  const current: PosterData = useMemo(
+    () => ({
+      ...data,
+      headline,
+      subline,
+      badge,
+      cta,
+      ratio,
+      template,
+    }),
+    [badge, cta, data, headline, ratio, subline, template],
+  );
 
   const paint = useCallback(async () => {
     const canvas = canvasRef.current;
@@ -38,17 +77,17 @@ export function PosterStudio({ data, imageUrl }: { data: PosterData; imageUrl?: 
 
   useEffect(() => {
     let cancelled = false;
-    if (!imageUrl) {
+    if (!activeImageUrl) {
       setProductImage(null);
       return;
     }
-    void loadImageElement(imageUrl).then((image) => {
+    void loadImageElement(activeImageUrl).then((image) => {
       if (!cancelled) setProductImage(image);
     });
     return () => {
       cancelled = true;
     };
-  }, [imageUrl]);
+  }, [activeImageUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,11 +110,12 @@ export function PosterStudio({ data, imageUrl }: { data: PosterData; imageUrl?: 
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `poster-${ratio.replace(":", "x")}.png`;
+      link.download = `poster-${template}-${ratio.replace(":", "x")}.png`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 4000);
-      setNote("ছবি ডাউনলোড হয়েছে");
-      setTimeout(() => setNote(null), 2000);
+      setNote("পোস্টার PNG ডাউনলোড হয়েছে");
+      showToast("ভাইরাল পোস্টার PNG ডাউনলোড সম্পন্ন!");
+      setTimeout(() => setNote(null), 2200);
     }, "image/png");
   }
 
@@ -93,6 +133,68 @@ export function PosterStudio({ data, imageUrl }: { data: PosterData; imageUrl?: 
       showToast("ব্রাউজার ইমেজ কপি সাপোর্ট করছে না — ডাউনলোড করুন", "error");
     }
     setTimeout(() => setNote(null), 2600);
+  }
+
+  if (compact) {
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          {TEMPLATES.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => setTemplate(item.value)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-[11px] font-[560] transition-colors",
+                template === item.value
+                  ? "border-accent bg-accent-soft text-accent-deep"
+                  : "border-line bg-card text-ink-soft hover:border-ink/25",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-[16px] border border-line bg-paper-deep p-1.5">
+          <canvas
+            ref={canvasRef}
+            aria-label="পোস্টার প্রিভিউ"
+            className={cn("block h-auto w-full rounded-[12px] transition-opacity duration-200", ready ? "opacity-100" : "opacity-0")}
+            style={{ aspectRatio: `${size.width} / ${size.height}` }}
+          />
+        </div>
+
+        {allSources.length > 1 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-ink-faint">ছবি বদলান:</span>
+            {allSources.map((src, idx) => (
+              <button
+                key={`mini-${idx}`}
+                type="button"
+                onClick={() => setSelectedIdx(idx)}
+                className={cn(
+                  "h-9 w-9 overflow-hidden rounded-[8px] ring-2 transition-all",
+                  idx === selectedIdx ? "ring-accent" : "opacity-65 ring-transparent hover:opacity-100",
+                )}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt={`ছবি ${idx + 1}`} className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="accent" icon={<IconDownload size={14} />} onClick={download}>
+            পোস্টার ডাউনলোড (PNG)
+          </Button>
+          <Button size="sm" variant="quiet" icon={<IconImage size={14} />} onClick={copyImage}>
+            ইমেজ কপি
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -116,8 +218,8 @@ export function PosterStudio({ data, imageUrl }: { data: PosterData; imageUrl?: 
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="primary" icon={<IconDownload size={16} />} onClick={download}>
-            PNG ডাউনলোড
+          <Button variant="accent" icon={<IconDownload size={16} />} onClick={download}>
+            HD PNG ডাউনলোড
           </Button>
           <Button variant="quiet" icon={<IconImage size={16} />} onClick={copyImage}>
             ইমেজ কপি
@@ -130,6 +232,27 @@ export function PosterStudio({ data, imageUrl }: { data: PosterData; imageUrl?: 
       </div>
 
       <div className="flex flex-col gap-4">
+        <div>
+          <p className="text-[11px] font-[620] uppercase tracking-[0.14em] text-ink-faint">টেমপ্লেট</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {TEMPLATES.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setTemplate(item.value)}
+                className={cn(
+                  "rounded-full border px-3.5 py-1.5 text-[12.5px] font-[560] transition-colors",
+                  template === item.value
+                    ? "border-accent bg-accent-soft text-accent-deep"
+                    : "border-line bg-card text-ink-soft hover:border-ink/25",
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div>
           <p className="text-[11px] font-[620] uppercase tracking-[0.14em] text-ink-faint">সাইজ</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -154,45 +277,74 @@ export function PosterStudio({ data, imageUrl }: { data: PosterData; imageUrl?: 
           </div>
         </div>
 
-        <div>
-          <p className="text-[11px] font-[620] uppercase tracking-[0.14em] text-ink-faint">টেমপ্লেট</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {TEMPLATES.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => setTemplate(item.value)}
-                className={cn(
-                  "rounded-full border px-3.5 py-1.5 text-[12.5px] transition-colors",
-                  template === item.value
-                    ? "border-accent bg-accent-soft text-accent-deep"
-                    : "border-line bg-card text-ink-soft hover:border-ink/25",
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
+        {allSources.length > 1 ? (
+          <div>
+            <p className="text-[11px] font-[620] uppercase tracking-[0.14em] text-ink-faint">
+              পোস্টারের ছবি বাছাই করুন ({bn(allSources.length)}টি)
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {allSources.map((src, idx) => (
+                <button
+                  key={`pick-${idx}`}
+                  type="button"
+                  onClick={() => setSelectedIdx(idx)}
+                  className={cn(
+                    "h-14 w-14 overflow-hidden rounded-[11px] ring-2 transition-all",
+                    idx === selectedIdx ? "ring-accent" : "opacity-70 ring-line hover:opacity-100",
+                  )}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt={`ছবি ${idx + 1}`} className="h-full w-full object-cover" />
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
 
-        <div className="rounded-[16px] border border-line bg-card/60 p-4">
-          <p className="text-[11px] font-[620] uppercase tracking-[0.14em] text-ink-faint">পোস্টারে যা থাকছে</p>
-          <dl className="mt-2.5 grid gap-2 text-[12.5px]">
-            {[
-              ["হেডলাইন", data.headline],
-              ["সাবলাইন", data.subline],
-              ["ব্যাজ", data.badge],
-              ["CTA", data.cta],
-            ].map(([label, value]) => (
-              <div key={label} className="flex gap-3">
-                <dt className="w-20 shrink-0 text-ink-faint">{label}</dt>
-                <dd className="min-w-0 flex-1 text-ink">{value || "—"}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="mt-3 border-t border-line/70 pt-2.5 text-[11.5px] leading-[1.7] text-ink-faint">
-            লেখাগুলো এডিট করতে ক্যাপশনের নিচের লেখা বদলে রিজেনারেট করুন — পোস্টার কপি স্বয়ংক্রিয়ভাবে আপডেট হয়।
+        <div className="rounded-[16px] border border-line bg-card/70 p-4">
+          <p className="text-[11px] font-[620] uppercase tracking-[0.14em] text-ink-faint">
+            লাইভ এডিট (সাথে সাথে পোস্টারে আপডেট হবে)
           </p>
+          <div className="mt-3 grid gap-2.5 text-[12.5px]">
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] text-ink-faint">ভাইরাল হেডলাইন</span>
+              <input
+                type="text"
+                value={headline}
+                onChange={(e) => setHeadline(e.target.value)}
+                className="h-9 rounded-[10px] border border-line bg-card px-3 text-[13px] outline-none focus:border-accent"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] text-ink-faint">সাবলাইন / মূল সুবিধা</span>
+              <input
+                type="text"
+                value={subline}
+                onChange={(e) => setSubline(e.target.value)}
+                className="h-9 rounded-[10px] border border-line bg-card px-3 text-[13px] outline-none focus:border-accent"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-2.5">
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-ink-faint">অফার ব্যাজ</span>
+                <input
+                  type="text"
+                  value={badge}
+                  onChange={(e) => setBadge(e.target.value)}
+                  className="h-9 rounded-[10px] border border-line bg-card px-3 text-[13px] outline-none focus:border-accent"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-ink-faint">CTA বাটন</span>
+                <input
+                  type="text"
+                  value={cta}
+                  onChange={(e) => setCta(e.target.value)}
+                  className="h-9 rounded-[10px] border border-line bg-card px-3 text-[13px] outline-none focus:border-accent"
+                />
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     </div>

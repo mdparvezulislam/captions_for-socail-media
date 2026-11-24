@@ -38,6 +38,7 @@ describe("mapUniStoreProduct", () => {
     expect(mapped.compareAtPriceBdt).toBe(1650);
     expect(mapped.offerText).toBe("Save ৳360 (22% OFF)");
     expect(mapped.imageUrl).toBe("https://ik.imagekit.io/pemifp53t/earbuds.jpg");
+    expect(mapped.enrich.images).toEqual(["https://ik.imagekit.io/pemifp53t/earbuds.jpg"]);
     expect(mapped.features).toEqual(["একসাথে ৩ জোড়া ইয়ারবাডস", "ব্যাটারি লেভেল দেখার সুবিধা"]);
     expect(mapped.enrich.featureLabels).toEqual(["Smart 3-in-1 Design", "LED Display"]);
     expect(mapped.enrich.orderUrl).toBe("https://uniquestorebd.top/product/cyxg-q102-earbuds");

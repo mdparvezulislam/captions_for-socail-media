@@ -3,10 +3,10 @@ import { notFound } from "next/navigation";
 import { PosterStudio } from "@/components/poster/poster-studio";
 import { Badge } from "@/components/ui/badge";
 import { CopyButton } from "@/components/ui/copy-button";
+import { ProductGallery } from "@/components/ui/product-gallery";
 import { getCaption, getPageById, getProduct } from "@/lib/data";
-import { imageSrcFor } from "@/lib/facebook-text";
-import { captionCopyText } from "@/lib/facebook-text";
-import { bnRelative, discountPercent, taka } from "@/lib/format";
+import { captionCopyText, productGallerySources } from "@/lib/facebook-text";
+import { bn, bnRelative, discountPercent, taka } from "@/lib/format";
 import type { PosterCopy } from "@/lib/types";
 import { requireSession } from "@/lib/session";
 
@@ -21,13 +21,13 @@ export default async function PosterPage({ params }: { params: Promise<{ id: str
   const [product, page] = await Promise.all([getProduct(caption.productId), getPageById(caption.pageId)]);
   if (!product || !page) notFound();
 
+  const gallerySources = productGallerySources(product);
+  const disc = discountPercent(product.priceBdt, product.compareAtPriceBdt);
   const poster: PosterCopy = caption.meta.poster ?? {
-    headline: product.nameBn.slice(0, 28),
-    subline: product.offerText ?? product.solutionBn.slice(0, 40),
-    badge: discountPercent(product.priceBdt, product.compareAtPriceBdt) > 0
-      ? `${discountPercent(product.priceBdt, product.compareAtPriceBdt)}% OFF`
-      : "নতুন",
-    cta: page.ctaText.slice(0, 22),
+    headline: product.nameBn.slice(0, 32),
+    subline: product.offerText ?? product.solutionBn.slice(0, 44),
+    badge: disc > 0 ? `${bn(disc)}% OFF` : "হট অফার",
+    cta: page.ctaText.slice(0, 24),
   };
 
   const data = {
@@ -43,13 +43,15 @@ export default async function PosterPage({ params }: { params: Promise<{ id: str
     comparePrice: product.compareAtPriceBdt ? taka(product.compareAtPriceBdt) : "",
     offer: product.offerText ?? "",
     productName: product.nameBn,
+    highlights: product.features.slice(0, 3),
+    hotline: product.enrich?.whatsapp ?? undefined,
     colors: {
       primary: page.brand.primary,
       accent: page.brand.accent,
       surface: page.brand.surface,
       ink: page.brand.ink,
     },
-    template: page.brand.layout,
+    template: "viral" as const,
     ratio: "4:5" as const,
   };
 
@@ -77,24 +79,12 @@ export default async function PosterPage({ params }: { params: Promise<{ id: str
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <a
-          href={imageSrcFor(product)}
-          download={`product-${product.sourceId}.jpg`}
-          className="inline-flex h-9 items-center rounded-[12px] border border-line bg-card px-3.5 text-[12.5px] font-[560] text-ink-soft hover:text-ink"
-        >
-          প্রোডাক্টের ছবি ডাউনলোড
-        </a>
-        {product.imageUrl ? (
-          <span className="text-[11.5px] text-ink-faint">সোর্স: স্টোর ক্যাটালগ</span>
-        ) : (
-          <span className="text-[11.5px] text-ink-faint">সোর্স: জেনারেটেড আর্ট</span>
-        )}
-      </div>
+      <ProductGallery sources={gallerySources} productName={product.nameBn} sourceId={product.sourceId} compact />
 
       <PosterStudio
         data={data}
-        imageUrl={product.imageUrl ? `/api/image?url=${encodeURIComponent(product.imageUrl)}` : null}
+        imageUrl={gallerySources[0] ?? null}
+        gallerySources={gallerySources}
       />
 
       <section className="card-surface p-5">

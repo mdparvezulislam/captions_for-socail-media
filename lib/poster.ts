@@ -1,5 +1,5 @@
 export type PosterRatio = "4:5" | "1:1" | "9:16";
-export type PosterTemplate = "editorial" | "bold" | "minimal";
+export type PosterTemplate = "viral" | "editorial" | "bold" | "minimal";
 
 export interface PosterData {
   brandName: string;
@@ -14,6 +14,9 @@ export interface PosterData {
   comparePrice: string;
   offer: string;
   productName: string;
+  highlights?: string[];
+  hotline?: string;
+  trustLine?: string;
   colors: { primary: string; accent: string; surface: string; ink: string };
   template: PosterTemplate;
   ratio: PosterRatio;
@@ -245,6 +248,238 @@ function drawCover(
   ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
 }
 
+function drawContain(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  area: { x: number; y: number; width: number; height: number },
+): void {
+  const { x, y, width, height } = area;
+  const imageRatio = image.naturalWidth / image.naturalHeight;
+  const areaRatio = width / height;
+  let drawWidth: number;
+  let drawHeight: number;
+  if (imageRatio > areaRatio) {
+    drawWidth = width;
+    drawHeight = width / imageRatio;
+  } else {
+    drawHeight = height;
+    drawWidth = height * imageRatio;
+  }
+  ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+}
+
+function drawViralPoster(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  data: PosterData,
+  productImage?: HTMLImageElement | null,
+): void {
+  const family = '"Anek Bangla", "Inter", system-ui, sans-serif';
+  const numeric = '"Inter", "Anek Bangla", system-ui, sans-serif';
+  const { colors } = data;
+  const pad = data.ratio === "1:1" ? 56 : 64;
+  const contentWidth = width - pad * 2;
+  const isStory = data.ratio === "9:16";
+  const isSquare = data.ratio === "1:1";
+
+  // 1. Rich high-contrast editorial background
+  const bg = ctx.createLinearGradient(0, 0, width, height);
+  bg.addColorStop(0, colors.ink);
+  bg.addColorStop(0.52, colors.primary);
+  bg.addColorStop(1, "#14110E");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, width, height);
+
+  // Subtle ambient accent glow behind product card
+  const spot = ctx.createRadialGradient(width * 0.5, height * 0.44, 40, width * 0.5, height * 0.44, width * 0.62);
+  spot.addColorStop(0, withAlpha(colors.accent, 0.32));
+  spot.addColorStop(1, withAlpha(colors.accent, 0));
+  ctx.fillStyle = spot;
+  ctx.fillRect(0, 0, width, height);
+
+  let cursorY = pad;
+
+  // 2. Top Brand Bar + Discount Badge
+  const logoSize = isSquare ? 58 : 66;
+  roundedRect(ctx, pad, cursorY, logoSize, logoSize, 16);
+  ctx.fillStyle = colors.accent;
+  ctx.fill();
+  ctx.fillStyle = "#FFFDF8";
+  ctx.textAlign = "center";
+  ctx.font = `700 ${Math.round(logoSize * 0.42)}px ${family}`;
+  ctx.fillText(data.logoMark || data.brandName.slice(0, 2), pad + logoSize / 2, cursorY + logoSize * 0.65);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#FFFDF8";
+  ctx.font = `680 ${isSquare ? 28 : 32}px ${family}`;
+  ctx.fillText(data.brandName, pad + logoSize + 18, cursorY + logoSize * 0.45);
+  ctx.fillStyle = "rgba(255,253,248,0.68)";
+  ctx.font = `400 ${isSquare ? 20 : 22}px ${family}`;
+  ctx.fillText(data.tagline.slice(0, 38), pad + logoSize + 18, cursorY + logoSize * 0.82);
+
+  if (data.badge) {
+    const badgeText = `🔥 ${data.badge}`;
+    ctx.font = `700 ${isSquare ? 26 : 28}px ${family}`;
+    const bw = Math.min(contentWidth * 0.42, ctx.measureText(badgeText).width + 44);
+    const bh = isSquare ? 52 : 58;
+    const bx = width - pad - bw;
+    const by = cursorY + (logoSize - bh) / 2;
+    roundedRect(ctx, bx, by, bw, bh, bh / 2);
+    ctx.fillStyle = colors.accent;
+    ctx.fill();
+    ctx.fillStyle = "#FFFDF8";
+    ctx.textAlign = "center";
+    ctx.fillText(badgeText, bx + bw / 2, by + bh * 0.67);
+  }
+
+  cursorY += logoSize + (isSquare ? 26 : 36);
+
+  // 3. Viral Hook Headline (high-impact white display type)
+  const headline = fitLines(ctx, data.headline, {
+    maxWidth: contentWidth,
+    maxLines: 2,
+    size: isStory ? 84 : isSquare ? 66 : 74,
+    minSize: isSquare ? 44 : 50,
+    weight: 700,
+    family,
+  });
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#FFFDF8";
+  headline.lines.forEach((line, i) => {
+    ctx.font = `700 ${headline.size}px ${family}`;
+    ctx.fillText(line, pad, cursorY + headline.size * 0.88 + i * headline.lineHeight);
+  });
+  cursorY += headline.lines.length * headline.lineHeight + 10;
+
+  // Subline
+  if (data.subline) {
+    const subline = fitLines(ctx, data.subline, {
+      maxWidth: contentWidth,
+      maxLines: 2,
+      size: isStory ? 34 : isSquare ? 28 : 30,
+      minSize: 22,
+      weight: 400,
+      family,
+    });
+    ctx.fillStyle = "rgba(255,253,248,0.78)";
+    subline.lines.forEach((line, i) => {
+      ctx.font = `400 ${subline.size}px ${family}`;
+      ctx.fillText(line, pad, cursorY + subline.size * 0.82 + i * subline.lineHeight);
+    });
+    cursorY += subline.lines.length * subline.lineHeight + (isSquare ? 20 : 28);
+  }
+
+  // Reserve bottom area for highlights + price + CTA
+  const highlights = (data.highlights ?? []).filter(Boolean).slice(0, isSquare ? 2 : 3);
+  const bottomReserve = (isSquare ? 245 : isStory ? 410 : 320) + (highlights.length > 0 ? (isSquare ? 54 : 68) : 0);
+  const heroHeight = Math.max(240, height - cursorY - pad - bottomReserve);
+
+  // 4. Clean Framed Product Hero Card (real product photo never cropped awkwardly)
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.42)";
+  ctx.shadowBlur = 44;
+  ctx.shadowOffsetY = 18;
+  roundedRect(ctx, pad, cursorY, contentWidth, heroHeight, 36);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fill();
+  ctx.restore();
+
+  if (productImage && productImage.naturalWidth > 0) {
+    ctx.save();
+    roundedRect(ctx, pad, cursorY, contentWidth, heroHeight, 36);
+    ctx.clip();
+    drawContain(ctx, productImage, {
+      x: pad + 20,
+      y: cursorY + 20,
+      width: contentWidth - 40,
+      height: heroHeight - 40,
+    });
+    ctx.restore();
+  } else {
+    drawArt(ctx, { x: pad, y: cursorY, width: contentWidth, height: heroHeight }, colors, "bold", null);
+  }
+
+  // Subtle accent border around product frame
+  ctx.strokeStyle = withAlpha(colors.accent, 0.55);
+  ctx.lineWidth = 3;
+  roundedRect(ctx, pad, cursorY, contentWidth, heroHeight, 36);
+  ctx.stroke();
+
+  cursorY += heroHeight + (isSquare ? 20 : 26);
+
+  // 5. Key Problem-Solving Highlight Pills
+  if (highlights.length > 0) {
+    let pillX = pad;
+    const pillH = isSquare ? 42 : 48;
+    ctx.font = `560 ${isSquare ? 21 : 23}px ${family}`;
+    for (const rawFeat of highlights) {
+      const text = `✓ ${rawFeat.slice(0, 26)}${rawFeat.length > 26 ? "…" : ""}`;
+      const pillW = Math.min(contentWidth, ctx.measureText(text).width + 34);
+      if (pillX + pillW > width - pad) break;
+      roundedRect(ctx, pillX, cursorY, pillW, pillH, pillH / 2);
+      ctx.fillStyle = "rgba(255,253,248,0.12)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,253,248,0.22)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = "#FFFDF8";
+      ctx.textAlign = "left";
+      ctx.fillText(text, pillX + 17, cursorY + pillH * 0.67);
+      pillX += pillW + 14;
+    }
+    cursorY += pillH + (isSquare ? 20 : 26);
+  }
+
+  // 6. Bottom Conversion Block: Offer Price + Compare Price + Trust Line
+  const ctaHeight = isSquare ? 88 : 98;
+  const ctaY = height - pad - ctaHeight;
+  const priceBaseline = ctaY - (isSquare ? 52 : 66);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#FFFDF8";
+  ctx.font = `700 ${isSquare ? 68 : 78}px ${numeric}`;
+  ctx.fillText(data.price, pad, priceBaseline);
+  const priceW = ctx.measureText(data.price).width;
+
+  if (data.comparePrice) {
+    ctx.font = `500 ${isSquare ? 32 : 36}px ${numeric}`;
+    ctx.fillStyle = "rgba(255,253,248,0.48)";
+    const cx = pad + priceW + 22;
+    const cy = priceBaseline - 8;
+    ctx.fillText(data.comparePrice, cx, cy);
+    const cw = ctx.measureText(data.comparePrice).width;
+    ctx.beginPath();
+    ctx.strokeStyle = withAlpha(colors.accent, 0.9);
+    ctx.lineWidth = 3.5;
+    ctx.moveTo(cx - 4, cy - 12);
+    ctx.lineTo(cx + cw + 4, cy - 12);
+    ctx.stroke();
+  }
+
+  // Trust line under price
+  const trustText = data.trustLine || "🚚 সারা বাংলাদেশে ক্যাশ অন ডেলিভারি · 🛡️ ৭ দিন রিপ্লেসমেন্ট";
+  ctx.font = `500 ${isSquare ? 21 : 24}px ${family}`;
+  ctx.fillStyle = "rgba(255,253,248,0.74)";
+  ctx.fillText(trustText, pad, priceBaseline + (isSquare ? 32 : 38));
+
+  // 7. High-contrast CTA Bar + Hotline
+  roundedRect(ctx, pad, ctaY, contentWidth, ctaHeight, 24);
+  ctx.fillStyle = colors.accent;
+  ctx.fill();
+
+  ctx.fillStyle = "#FFFDF8";
+  ctx.textAlign = "left";
+  ctx.font = `700 ${isSquare ? 32 : 36}px ${family}`;
+  ctx.fillText(data.cta || "অর্ডার করতে ইনবক্স করুন", pad + 32, ctaY + ctaHeight * 0.62);
+
+  const rightBadge = data.hotline ? `📞 ${data.hotline}` : data.watermark || data.brandName;
+  ctx.textAlign = "right";
+  ctx.font = `600 ${isSquare ? 24 : 26}px ${numeric}`;
+  ctx.fillStyle = "rgba(255,253,248,0.92)";
+  ctx.fillText(rightBadge, width - pad - 30, ctaY + ctaHeight * 0.6);
+}
+
 export async function drawPoster(canvas: HTMLCanvasElement, data: PosterData, productImage?: HTMLImageElement | null): Promise<void> {
   const { width, height } = posterSize(data.ratio);
   if (canvas.width !== width) canvas.width = width;
@@ -254,6 +489,11 @@ export async function drawPoster(canvas: HTMLCanvasElement, data: PosterData, pr
   if (!ctx) return;
 
   await ensurePosterFonts();
+
+  if (data.template === "viral") {
+    drawViralPoster(ctx, width, height, data, productImage);
+    return;
+  }
 
   const family = '"Anek Bangla", "Inter", system-ui, sans-serif';
   const numeric = '"Inter", "Anek Bangla", system-ui, sans-serif';

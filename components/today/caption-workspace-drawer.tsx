@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Accordion } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ProductGallery } from "@/components/ui/product-gallery";
+import { PosterStudio } from "@/components/poster/poster-studio";
 import { CaptionCardStack } from "@/components/today/caption-card-stack";
 import {
   IconArrowUpRight,
@@ -22,8 +24,8 @@ import {
   saveCaptionAction,
 } from "@/app/actions";
 import { showToast } from "@/components/ui/toast";
-import { formatForFacebook, groupOrderBlock, imageSrcFor } from "@/lib/facebook-text";
-import { bn, bnNumber, bnRelative, taka } from "@/lib/format";
+import { formatForFacebook, groupOrderBlock, imageSrcFor, productGallerySources } from "@/lib/facebook-text";
+import { bn, bnNumber, bnRelative, discountPercent, taka } from "@/lib/format";
 
 import { cn } from "@/lib/cn";
 import type { Caption } from "@/lib/types";
@@ -106,7 +108,6 @@ export function CaptionWorkspaceDrawer({
   const [includeHashtags, setIncludeHashtags] = useState(true);
   const [facebookBold, setFacebookBold] = useState(true);
   const [groupMode, setGroupMode] = useState(false);
-  const [gallery, setGallery] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [captions, setCaptions] = useState<Caption[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -230,7 +231,40 @@ export function CaptionWorkspaceDrawer({
   const product = data?.product;
   const page = data?.page;
   const readyCount = captions.length;
-  const imageCaptionId = captions.find((caption) => caption.type === "image")?.id ?? captions[0]?.id ?? null;
+  const imageCaption = captions.find((caption) => caption.type === "image") ?? captions[0] ?? null;
+  const imageCaptionId = imageCaption?.id ?? null;
+  const gallerySources = product ? productGallerySources(product) : [];
+  const inlinePosterData =
+    product && page
+      ? {
+          brandName: page.brandName,
+          logoMark: page.brand.logoMark,
+          watermark: page.brand.watermark,
+          tagline: page.tagline,
+          headline: imageCaption?.meta.poster?.headline || product.nameBn.slice(0, 32),
+          subline: imageCaption?.meta.poster?.subline || product.solutionBn.slice(0, 46) || page.tagline,
+          badge:
+            imageCaption?.meta.poster?.badge ||
+            (discountPercent(product.priceBdt, product.compareAtPriceBdt) > 0
+              ? `${bn(discountPercent(product.priceBdt, product.compareAtPriceBdt))}% OFF`
+              : "হট অফার"),
+          cta: imageCaption?.meta.poster?.cta || "অর্ডার করতে ইনবক্স করুন",
+          price: taka(product.priceBdt),
+          comparePrice: product.compareAtPriceBdt ? taka(product.compareAtPriceBdt) : "",
+          offer: product.offerText ?? "",
+          productName: product.nameBn,
+          highlights: product.features.slice(0, 3),
+          hotline: product.enrich?.whatsapp ?? undefined,
+          colors: {
+            primary: page.brand.primary,
+            accent: page.brand.accent,
+            surface: page.brand.surface,
+            ink: page.brand.ink,
+          },
+          template: "viral" as const,
+          ratio: "4:5" as const,
+        }
+      : null;
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label="ইনস্ট্যান্ট ক্যাপশন স্টুডিও">
@@ -349,59 +383,14 @@ export function CaptionWorkspaceDrawer({
                 </div>
               </div>
 
-              {/* গ্যালারি স্ট্রিপ */}
-              <div className="mt-3 flex items-center gap-2">
-                <a
-                  href={imageSrcFor(product)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group relative h-14 w-14 overflow-hidden rounded-[10px] ring-1 ring-line"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={imageSrcFor(product)}
-                    alt=""
-                    width={80}
-                    height={80}
-                    loading="lazy"
-                    className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
-                  />
-                </a>
-                {[2, 3].map((variant) => (
-                  <a
-                    key={variant}
-                    href={imageSrcFor(product)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hidden h-14 w-14 overflow-hidden rounded-[10px] ring-1 ring-line sm:block"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={imageSrcFor(product)}
-                      alt=""
-                      width={80}
-                      height={80}
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                    />
-                  </a>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setGallery(true)}
-                  className="inline-flex h-8 items-center gap-1 rounded-[10px] border border-line bg-card px-2.5 text-[11.5px] text-ink-soft hover:text-ink"
-                >
-                  <IconImage size={14} /> গ্যালারি
-                </button>
-                {product.imageUrl ? (
-                  <a
-                    href={imageSrcFor(product)}
-                    download={`product-${product.sourceId}.jpg`}
-                    className="inline-flex h-8 items-center gap-1 rounded-[10px] border border-line bg-card px-2.5 text-[11.5px] text-ink-soft hover:text-ink"
-                  >
-                    ছবি ডাউনলোড
-                  </a>
-                ) : null}
+              {/* প্রোডাক্টের সব গ্যালারি ছবি — ক্লিক করলেই ডাউনলোড */}
+              <div className="mt-3">
+                <ProductGallery
+                  sources={gallerySources}
+                  productName={product.nameBn}
+                  sourceId={product.sourceId}
+                  compact
+                />
               </div>
 
               {/* হ্যাশট্যাগ টগল + রিজেনারেট */}
@@ -494,12 +483,23 @@ export function CaptionWorkspaceDrawer({
                       </div>
                     </div>
                     <p className="caption-text mt-2 text-[12.5px]">
-                      {captions[0]?.body ?? "ক্যাপশন তৈরি হলে এখানে প্রিভিউ দেখা যাবে।"}
+                      {captions[0]?.body
+                        ? facebookBold
+                          ? formatForFacebook(captions[0].body)
+                          : captions[0].body
+                        : "ক্যাপশন তৈরি হলে এখানে প্রিভিউ দেখা যাবে।"}
                     </p>
                     {includeHashtags ? (
                       <p className="mt-1.5 text-[11px] text-sky">{page.hashtags.join(" ")}</p>
                     ) : null}
-                    <div className="mt-2 h-32 rounded-[10px] bg-gradient-to-br from-paper-deep to-line" />
+                    <div className="mt-2 overflow-hidden rounded-[10px] bg-paper-deep">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={gallerySources[0] ?? imageSrcFor(product)}
+                        alt={product.nameBn}
+                        className="max-h-56 w-full object-contain bg-white"
+                      />
+                    </div>
                   </div>
                 </Accordion>
 
@@ -533,20 +533,25 @@ export function CaptionWorkspaceDrawer({
                   </dl>
                 </Accordion>
 
-                <Accordion title="AI পোস্টার জেনারেটর" icon={<IconSpark size={14} className="text-ink-faint" />}>
-                  <p className="text-[12px] leading-[1.75] text-ink-soft">
-                    ব্র্যান্ড কিট ব্যবহার করে পোস্টার বানান — ৪:৫, ১:১, ৯:১৬ রেশিওতে, বাংলা লেখা নিখুঁত।
-                  </p>
-                  {imageCaptionId ? (
-                    <a
-                      href={`/poster/${imageCaptionId}`}
-                      className="mt-2.5 inline-flex h-9 items-center gap-1.5 rounded-[12px] border border-ink bg-ink px-4 text-[12.5px] font-[560] text-[#FFFDF8]"
-                    >
-                      <IconArrowUpRight size={14} /> পোস্টার স্টুডিও খুলুন
-                    </a>
-                  ) : (
-                    <p className="mt-2 text-[11.5px] text-ink-faint">ক্যাপশন তৈরি হলে পোস্টার খোলা যাবে।</p>
-                  )}
+                <Accordion title="🔥 AI ভাইরাল পোস্টার জেনারেটর" icon={<IconSpark size={14} className="text-accent-deep" />}>
+                  {inlinePosterData ? (
+                    <div className="flex flex-col gap-3">
+                      <PosterStudio
+                        data={inlinePosterData}
+                        imageUrl={gallerySources[0] ?? null}
+                        gallerySources={gallerySources}
+                        compact
+                      />
+                      {imageCaptionId ? (
+                        <a
+                          href={`/poster/${imageCaptionId}`}
+                          className="inline-flex h-9 w-fit items-center gap-1.5 rounded-[12px] border border-ink bg-ink px-4 text-[12px] font-[560] text-[#FFFDF8]"
+                        >
+                          <IconArrowUpRight size={14} /> ফুল পোস্টার স্টুডিও ও টেক্সট এডিট
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </Accordion>
               </div>
             </div>
@@ -581,28 +586,6 @@ export function CaptionWorkspaceDrawer({
                 </button>
               </div>
             </div>
-
-            {/* গ্যালারি ওভারলে */}
-            {gallery ? (
-              <div
-                className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-ink/90 p-4"
-                onClick={() => setGallery(false)}
-                role="presentation"
-              >
-                <div className="grid grid-cols-2 gap-2">
-                  {[product.imageUrl ?? product.artSeed].map((source) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={String(source)}
-                      src={imageSrcFor(product)}
-                      alt={product.nameBn}
-                      className="w-[60vw] max-w-[280px] rounded-[12px] object-contain sm:w-[280px]"
-                    />
-                  ))}
-                </div>
-                <p className="text-[11.5px] text-white/60">বন্ধ করতে ট্যাপ করুন</p>
-              </div>
-            ) : null}
           </>
         )}
       </div>

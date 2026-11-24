@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { IconDownload, IconImage } from "@/components/ui/icons";
+import { showToast } from "@/components/ui/toast";
 import { drawPoster, loadImageElement, posterSize, type PosterData, type PosterRatio, type PosterTemplate } from "@/lib/poster";
 import { cn } from "@/lib/cn";
 
@@ -86,8 +87,10 @@ export function PosterStudio({ data, imageUrl }: { data: PosterData; imageUrl?: 
       if (!blob) return;
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       setNote("ইমেজ কপি হয়েছে — ফেসবুকে পেস্ট করুন");
+      showToast("✓ পোস্টার ইমেজ ক্লিপবোর্ডে কপি সম্পন্ন!");
     } catch {
       setNote("ব্রাউজার কপি সাপোর্ট করছে না — ডাউনলোড করুন");
+      showToast("ব্রাউজার ইমেজ কপি সাপোর্ট করছে না — ডাউনলোড করুন", "error");
     }
     setTimeout(() => setNote(null), 2600);
   }

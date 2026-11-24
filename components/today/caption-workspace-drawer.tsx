@@ -21,6 +21,7 @@ import {
   regenerateAction,
   saveCaptionAction,
 } from "@/app/actions";
+import { showToast } from "@/components/ui/toast";
 import { formatForFacebook, groupOrderBlock, imageSrcFor } from "@/lib/facebook-text";
 import { bn, bnNumber, bnRelative, taka } from "@/lib/format";
 
@@ -175,8 +176,10 @@ export function CaptionWorkspaceDrawer({
       if (result.ok && result.body) {
         setCaptions((prev) => prev.map((item) => (item.id === caption.id ? { ...item, body: result.body! } : item)));
         setNotice("নতুন করে লেখা হয়েছে");
+        showToast("✓ নতুন করে লেখা সম্পন্ন!");
       } else {
         setNotice(result.message ?? "রিরাইট করা যায়নি");
+        showToast(result.message ?? "রিরাইট করা যায়নি", "error");
       }
       setTimeout(() => setNotice(null), 2200);
     });
@@ -188,6 +191,7 @@ export function CaptionWorkspaceDrawer({
       if (result.ok) {
         setCaptions((prev) => prev.map((item) => (item.id === caption.id ? { ...item, body, status: "edited" } : item)));
         setNotice("সেভ হয়েছে");
+        showToast("✓ এডিট করা ক্যাপশন সেভ হয়েছে");
       }
       setTimeout(() => setNotice(null), 1800);
     });
@@ -200,6 +204,7 @@ export function CaptionWorkspaceDrawer({
         setCaptions((prev) =>
           prev.map((item) => (item.id === caption.id ? { ...item, status: posted ? "posted" : "ready" } : item)),
         );
+        showToast(posted ? "✓ পোস্ট হিসেবে চিহ্নিত করা হয়েছে" : "পোস্টের চিহ্ন সরানো হয়েছে");
         router.refresh();
       }
     });
@@ -211,9 +216,11 @@ export function CaptionWorkspaceDrawer({
       const result = await generateForProductAction(data.product.id);
       if (result.ok) {
         await load(data.product.id);
+        showToast("✓ ৩টি ক্যাপশন তৈরি সম্পন্ন!");
         router.refresh();
       } else {
         setNotice(result.message ?? "তৈরি করা যায়নি");
+        showToast(result.message ?? "তৈরি করা যায়নি", "error");
         setTimeout(() => setNotice(null), 2600);
       }
     });

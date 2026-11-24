@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { IconCheck, IconCopy } from "@/components/ui/icons";
+import { showToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 
 export function CopyButton({
@@ -41,9 +42,10 @@ export function CopyButton({
       document.body.removeChild(area);
     }
     setCopied(true);
+    showToast(copiedLabel === "কপি হয়েছে" ? "✓ ক্লিপবোর্ডে কপি সম্পন্ন!" : `✓ ${copiedLabel}`);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), 1600);
-  }, [text]);
+  }, [copiedLabel, text]);
 
   const styles =
     variant === "primary"

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { cache } from "react";
 import "./globals.css";
 import { AppShell } from "@/components/shell/app-shell";
+import { ToastHost } from "@/components/ui/toast";
 import { listPages } from "@/lib/data";
 import { currentSession } from "@/lib/session";
 
@@ -34,6 +35,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <AppShell pages={pages} session={session}>
           {children}
         </AppShell>
+        <ToastHost />
       </body>
     </html>
   );

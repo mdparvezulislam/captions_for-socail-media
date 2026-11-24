@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { IconCheck, IconPen, IconRefresh } from "@/components/ui/icons";
+import { IconCheck, IconCopy, IconPen, IconRefresh } from "@/components/ui/icons";
+import { showToast } from "@/components/ui/toast";
 import { bn, wordCount } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import type { Caption, CaptionType } from "@/lib/types";
@@ -88,8 +89,16 @@ function CaptionCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const body = caption?.body ?? "";
   const posted = caption?.status === "posted";
+
+  useEffect(() => {
+    return () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    };
+  }, []);
 
   if (!caption) {
     return (
@@ -104,6 +113,40 @@ function CaptionCard({
   }
 
   const copyText = onCopyText(body);
+
+  async function handleCopy() {
+    let success = false;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        await navigator.clipboard.writeText(copyText);
+        success = true;
+      }
+    } catch {
+      // fallback
+    }
+
+    if (!success && typeof document !== "undefined") {
+      try {
+        const area = document.createElement("textarea");
+        area.value = copyText;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.select();
+        success = document.execCommand("copy");
+        document.body.removeChild(area);
+      } catch {
+        success = false;
+      }
+    }
+
+    setCopied(true);
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => setCopied(false), 2200);
+
+    showToast("✓ ফেসবুক ক্যাপশন কপি সম্পন্ন! পেজে বা গ্রুপে সরাসরি পেস্ট করুন");
+  }
 
   return (
     <article
@@ -199,13 +242,26 @@ function CaptionCard({
       {!editing ? (
         <button
           type="button"
-          onClick={() => navigator.clipboard.writeText(copyText).catch(() => undefined)}
+          onClick={handleCopy}
+          aria-label={copied ? "ক্যাপশন কপি সম্পন্ন" : "ফেসবুক ক্যাপশন কপি করুন"}
           className={cn(
-            "mt-3 h-11 w-full rounded-[12px] border border-accent-deep/25 bg-accent text-[14px] font-[600] text-white",
-            "shadow-[0_10px_22px_-14px_rgba(207,79,23,0.85)] transition-colors hover:bg-accent-deep active:translate-y-px",
+            "mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-[12px] border text-[14px] font-[600] transition-all duration-200 active:scale-[0.99]",
+            copied
+              ? "border-moss bg-moss text-white shadow-[0_10px_22px_-14px_rgba(46,125,50,0.85)]"
+              : "border-accent-deep/25 bg-accent text-white shadow-[0_10px_22px_-14px_rgba(207,79,23,0.85)] hover:bg-accent-deep",
           )}
         >
-          কপি করুন
+          {copied ? (
+            <>
+              <IconCheck size={17} strokeWidth={2.4} />
+              <span>কপি সম্পন্ন হয়েছে!</span>
+            </>
+          ) : (
+            <>
+              <IconCopy size={16} />
+              <span>কপি করুন</span>
+            </>
+          )}
         </button>
       ) : null}
     </article>

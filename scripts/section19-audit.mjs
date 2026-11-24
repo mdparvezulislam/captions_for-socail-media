@@ -33,6 +33,7 @@ check("2-column grid on mobile", await page.evaluate(() => {
 }));
 
 await page.screenshot({ path: `${OUT}/s19-mobile-grid.png` });
+await page.waitForTimeout(1800); // React hydration before interactions
 
 // Click a card that already has captions (✓ badge) → drawer opens WITHOUT navigation
 const readyCard = page.locator('[data-testid="task-grid"] > li').filter({ hasText: "✓" }).first();
@@ -99,19 +100,26 @@ await dpage.goto(`${BASE}/login`, { waitUntil: "networkidle", timeout: 60000 });
 await dpage.fill('input[type="password"]', process.env.AUDIT_KEY ?? "flparvez");
 await dpage.click('button[type="submit"]');
 await dpage.waitForSelector('[data-testid="task-grid"]', { timeout: 60000 });
+await dpage.waitForTimeout(2000); // React hydration
 check("6-column grid on desktop", await dpage.evaluate(() => {
   const grid = document.querySelector('[data-testid="task-grid"]');
   return grid && getComputedStyle(grid).gridTemplateColumns.split(" ").length >= 6;
 }));
 await dpage.screenshot({ path: `${OUT}/s19-desktop-grid.png` });
 
-// Ctrl+K search modal
+// Ctrl+K search modal (keyboard handler verified separately below)
 await dpage.keyboard.press("ControlOrMeta+k");
-await dpage.waitForTimeout(400);
+await dpage.waitForTimeout(1200);
+const kbdOpen = (await dpage.locator('[role="dialog"]').count()) > 0;
+check("Ctrl+K opens search modal", kbdOpen);
+if (!kbdOpen) {
+  await dpage.locator('button[aria-label*="সার্চ"]').first().click();
+  await dpage.waitForTimeout(800);
+}
 await dpage.keyboard.type("Wireless");
-await dpage.waitForTimeout(900);
+await dpage.waitForTimeout(1200);
 const results = await dpage.locator('[role="dialog"] ul li button').count();
-check("Ctrl+K search returns results", results > 0, `results=${results}`);
+check("search returns synced products", results > 0, `results=${results}`);
 await dpage.screenshot({ path: `${OUT}/s19-search-modal.png` });
 if (results > 0) {
   const studioResponse = dpage.waitForResponse((response) => response.url().includes("/api/studio/"), { timeout: 30000 });

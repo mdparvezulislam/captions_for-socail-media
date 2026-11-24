@@ -16,7 +16,8 @@ cp .dev.vars.example .dev.vars        # GEMINI_API_KEY বসান
 pnpm dev                              # http://localhost:5173
 ```
 
-- `pnpm test` — vitest (৪৩+ টেস্ট)
+- লগইন: সিক্রেট কী দিয়ে — `flparvez` = অ্যাডমিন, `usb` = মডারেটর (`.dev.vars`/secret-এ কনফিগার)
+- `pnpm test` — vitest (৪৬ টেস্ট)
 - `pnpm typecheck` — tsc strict
 - `pnpm build` — production worker build
 - `PLAYWRIGHT_BROWSERS_PATH=$PWD/.cache/pw-browsers node scripts/section19-audit.mjs` — UI audit (১৫ চেক)
@@ -41,11 +42,14 @@ npx wrangler d1 create caption-engine-db     # config-এ id বসান
 npx wrangler r2 bucket create caption-engine-media
 npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put INTERNAL_JOB_TOKEN
+npx wrangler secret put ADMIN_KEY          # যেমন: flparvez
+npx wrangler secret put MOD_KEY            # যেমন: usb
+npx wrangler secret put AUTH_SECRET        # লম্বা র‍্যান্ডম স্ট্রিং (কুকি সাইনিং)
 pnpm run deploy                     # vinext-cloudflare deploy
 ```
 
-- ক্রন: আলাদা worker বা CF cron trigger দিয়ে প্রতিদিন 01:00 UTC (ঢাকা ০৭:০০) → `POST /api/jobs/daily`
-- ড্যাশবোর্ড অথ: Cloudflare Access (ইমেইল OTP) — `cf-access-authenticated-user-email` হেডার থেকে সেশন
+- **সিঙ্ক:** প্রতিদিন সকালে জব আগে `uniquestorebd.top/api/v1/products` থেকে ক্যাটালগ সিঙ্ক করে, তারপর ক্যাপশন; ম্যানুয়ালি: `/products` → "স্টোর থেকে সিঙ্ক করুন" বা `POST /api/sync`
+- ড্যাশবোর্ড অথ: সিক্রেট কী (flparvez/usb) — Cloudflare Access থাকলে সেটাও সাপোর্টেড (`cf-access-authenticated-user-email` হেডার)
 - প্রথম রিকোয়েস্টে D1 schema + ডেমো সিড অটো বসে; সিঙ্ক চালু হলে লাইভ ক্যাটালগ ঢোকে
 
 ## দৈনিক ফ্লো

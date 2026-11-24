@@ -17,8 +17,9 @@ export default function LoginPage() {
     startTransition(async () => {
       const result = await loginWithKey(key);
       if (result.ok) {
-        router.replace("/today");
-        router.refresh();
+        // Layout রুট-স্তরে ক্যাশ হয় — নতুন সেশন কুকি নিয়ে ফুল রিলোড জরুরি
+        window.location.assign("/today");
+        return;
       } else {
         setError(result.message ?? "লগইন ব্যর্থ");
       }

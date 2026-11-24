@@ -4,9 +4,17 @@ import { captionCopyText, deriveKeyword, formatForFacebook, toBold } from "@/lib
 describe("toBold", () => {
   it("maps Latin letters and digits to mathematical bold", () => {
     const cps = (input: string) => Array.from(input).map((c) => c.codePointAt(0));
-    // F a s t -> Mathematical Sans-Serif Bold
-    expect(cps(toBold("Fast"))).toEqual([0x1d5f1, 0x1d606, 0x1d618, 0x1d619]);
-    expect(cps(toBold("T900"))).toEqual([0x1d5ff, 0x1d7f5, 0x1d7ec, 0x1d7ec]);
+    // F a s t -> Mathematical Sans-Serif Bold (0x1d5d9, 0x1d5ee, 0x1d600, 0x1d601)
+    expect(toBold("Fast")).toBe("𝗙𝗮𝘀𝘁");
+    expect(cps(toBold("Fast"))).toEqual([0x1d5d9, 0x1d5ee, 0x1d600, 0x1d601]);
+    expect(toBold("T900")).toBe("𝗧𝟵𝟬𝟬");
+    expect(cps(toBold("T900"))).toEqual([0x1d5e7, 0x1d7f5, 0x1d7ec, 0x1d7ec]);
+
+    // Product and feature names from store catalog
+    expect(toBold("CYXG Q102 3-in-1 Wireless Earbuds")).toBe("𝗖𝗬𝗫𝗚 𝗤𝟭𝟬𝟮 𝟯-𝗶𝗻-𝟭 𝗪𝗶𝗿𝗲𝗹𝗲𝘀𝘀 𝗘𝗮𝗿𝗯𝘂𝗱𝘀");
+    expect(toBold("Smart 3-in-1 Design")).toBe("𝗦𝗺𝗮𝗿𝘁 𝟯-𝗶𝗻-𝟭 𝗗𝗲𝘀𝗶𝗴𝗻");
+    expect(toBold("Crystal Clear Audio")).toBe("𝗖𝗿𝘆𝘀𝘁𝗮𝗹 𝗖𝗹𝗲𝗮𝗿 𝗔𝘂𝗱𝗶𝗼");
+    expect(toBold("LED Display Screen")).toBe("𝗟𝗘𝗗 𝗗𝗶𝘀𝗽𝗹𝗮𝘆 𝗦𝗰𝗿𝗲𝗲𝗻");
   });
 
   it("leaves Bangla, emoji and symbols untouched", () => {

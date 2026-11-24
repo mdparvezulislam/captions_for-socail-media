@@ -1,7 +1,7 @@
 import type { CaptionMeta, CaptionType, Page, PosterCopy, Product } from "@/lib/types";
 import { demoCaptionSet, demoPosterCopy } from "@/lib/ai/demo";
 import { buildPrompt, type Angle } from "@/lib/ai/prompts";
-import { callGemini } from "@/lib/ai/gemini";
+import { callGemini, DEFAULT_GEMINI_MODEL, GeminiError } from "@/lib/ai/gemini";
 import { validateCaption } from "@/lib/ai/validate";
 import { taka } from "@/lib/format";
 
@@ -33,6 +33,33 @@ export interface GenerateInput {
 }
 
 const ANGLES: Angle[] = ["benefit", "emotional", "urgency"];
+
+const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** High-demand 503s are transient — retry with backoff, then fall back to a stable model. */
+async function callWithFallback(
+  params: Omit<Parameters<typeof callGemini>[0], "model">,
+  primaryModel: string,
+): Promise<{ response: Awaited<ReturnType<typeof callGemini>>; model: string }> {
+  const chain = [primaryModel, ...FALLBACK_MODELS.filter((model) => model !== primaryModel)];
+  let lastError: GeminiError | null = null;
+
+  for (const model of chain) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await callGemini({ ...params, model });
+        return { response, model };
+      } catch (error) {
+        if (!(error instanceof GeminiError) || !error.retryable) throw error;
+        lastError = error;
+        await sleep(1200 * (attempt + 1));
+      }
+    }
+  }
+  throw lastError ?? new GeminiError("Gemini unavailable");
+}
 
 function angleFor(productId: string): Angle {
   let sum = 0;
@@ -104,13 +131,15 @@ export async function generateCaptionDrafts(input: GenerateInput): Promise<Gener
     ? `${prompt.user}\n\nঅতিরিক্ত নির্দেশনা (অবশ্যই মানতে হবে): ${input.instruction}`
     : prompt.user;
 
-  const response = await callGemini({
-    apiKey: input.apiKey,
-    model: input.model ?? "gemini-2.5-flash",
-    system: prompt.system,
-    user,
-    schema: prompt.responseSchema,
-  });
+  const { response, model: usedModel } = await callWithFallback(
+    {
+      apiKey: input.apiKey,
+      system: prompt.system,
+      user,
+      schema: prompt.responseSchema,
+    },
+    input.model ?? DEFAULT_GEMINI_MODEL,
+  );
 
   const json = response.json as Record<string, unknown>;
   const video = (json.video_caption ?? {}) as Record<string, unknown>;
@@ -163,7 +192,7 @@ export async function generateCaptionDrafts(input: GenerateInput): Promise<Gener
   return {
     drafts,
     source: "gemini",
-    model: response.model,
+    model: usedModel,
     tokensIn: response.tokensIn,
     tokensOut: response.tokensOut,
     issues,

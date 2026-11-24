@@ -47,6 +47,7 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
+.playwright-mcp/
 
 # Operating System files
 .DS_Store

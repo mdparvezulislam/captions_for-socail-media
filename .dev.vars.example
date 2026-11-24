@@ -1,0 +1,5 @@
+# কপি করে .dev.vars বানান — আসল কী কখনো এই ফাইলে কমিট করবেন না
+GEMINI_API_KEY=your-gemini-api-key-here
+GEMINI_MODEL=gemini-3.8-flash
+INTERNAL_JOB_TOKEN=dev-job-token
+PRODUCT_API_TOKEN=dev-product-token

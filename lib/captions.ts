@@ -16,7 +16,7 @@ function apiKey(): string | undefined {
 
 function modelName(): string {
   const model = (env as unknown as Record<string, unknown>).GEMINI_MODEL;
-  return typeof model === "string" && model.trim() ? model.trim() : "gemini-2.5-flash";
+  return typeof model === "string" && model.trim() ? model.trim() : "gemini-3.8-flash";
 }
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {

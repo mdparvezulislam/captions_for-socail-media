@@ -11,6 +11,9 @@ const getSessionOnce = cache(getSession);
 export const metadata: Metadata = {
   title: "ক্যাপশন স্টুডিও — বাংলা ক্যাপশন ডেস্ক",
   description: "প্রোডাক্ট থেকে প্রতিদিন বাংলা ক্যাপশন — ফেসবুক পেজের জন্য তৈরি কনটেন্ট ডেস্ক।",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export const viewport: Viewport = {

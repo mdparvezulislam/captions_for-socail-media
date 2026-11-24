@@ -25,7 +25,7 @@ export default async function SettingsPage() {
   ]);
 
   const apiKey = readEnv("GEMINI_API_KEY");
-  const model = readEnv("GEMINI_MODEL") ?? "gemini-2.5-flash";
+  const model = readEnv("GEMINI_MODEL") ?? "gemini-3.8-flash";
   const demoMode = !apiKey;
 
   const rows: { label: string; value: string; ok?: boolean; note?: string }[] = [

@@ -35,10 +35,23 @@ interface GeminiPayload {
   error?: { message?: string; status?: string };
 }
 
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+
 export async function callGemini(request: GeminiRequest): Promise<GeminiResponse> {
-  const model = request.model ?? "gemini-2.5-flash";
+  const model = request.model ?? DEFAULT_GEMINI_MODEL;
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const started = Date.now();
+
+  const generationConfig: Record<string, unknown> = {
+    temperature: request.temperature ?? 0.9,
+    responseMimeType: "application/json",
+    responseSchema: request.schema,
+    maxOutputTokens: 2000,
+  };
+  // 2.5-এর "thinking" ডিফল্ট চালু — সেটাই maxOutputTokens খেয়ে JSON কেটে দেয়। ক্যাপশনে দরকার নেই।
+  if (model.startsWith("gemini-2.5")) {
+    generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  }
 
   let response: Response;
   try {
@@ -51,12 +64,7 @@ export async function callGemini(request: GeminiRequest): Promise<GeminiResponse
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: request.user }] }],
         systemInstruction: { parts: [{ text: request.system }] },
-        generationConfig: {
-          temperature: request.temperature ?? 0.9,
-          responseMimeType: "application/json",
-          responseSchema: request.schema,
-          maxOutputTokens: 1400,
-        },
+        generationConfig,
       }),
       signal: AbortSignal.timeout(request.timeoutMs ?? 45_000),
     });

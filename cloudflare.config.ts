@@ -17,6 +17,10 @@ export default defineConfig({
       DB: bindings.d1({ name: "caption-engine-db" }),
       MEDIA: bindings.r2({ name: "caption-engine-media" }),
       BROWSER: bindings.browser(),
+      GEMINI_API_KEY: bindings.secret(),
+      GEMINI_MODEL: bindings.secret(),
+      INTERNAL_JOB_TOKEN: bindings.secret(),
+      PRODUCT_API_TOKEN: bindings.secret(),
     },
   }),
 });

@@ -7,10 +7,12 @@ import { getCaption, getPageById, getProduct } from "@/lib/data";
 import { captionCopyText } from "@/lib/facebook-text";
 import { bnRelative, discountPercent, taka } from "@/lib/format";
 import type { PosterCopy } from "@/lib/types";
+import { requireSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function PosterPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireSession();
   const { id } = await params;
   const caption = await getCaption(id);
   if (!caption) notFound();

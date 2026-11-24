@@ -3,10 +3,10 @@ import { cache } from "react";
 import "./globals.css";
 import { AppShell } from "@/components/shell/app-shell";
 import { listPages } from "@/lib/data";
-import { getSession } from "@/lib/session";
+import { currentSession } from "@/lib/session";
 
 const getPages = cache(listPages);
-const getSessionOnce = cache(getSession);
+
 
 export const metadata: Metadata = {
   title: "ক্যাপশন স্টুডিও — বাংলা ক্যাপশন ডেস্ক",
@@ -23,7 +23,7 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const [pages, session] = await Promise.all([getPages(), getSessionOnce()]);
+  const [pages, session] = await Promise.all([getPages(), currentSession()]);
   return (
     <html lang="bn">
       <head>

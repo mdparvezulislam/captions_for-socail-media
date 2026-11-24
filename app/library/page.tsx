@@ -8,6 +8,7 @@ import { listCaptions, listPages } from "@/lib/data";
 import { captionCopyText } from "@/lib/facebook-text";
 import { bn, bnDate, excerpt } from "@/lib/format";
 import { CAPTION_TYPES, type CaptionStatus, type CaptionType } from "@/lib/types";
+import { requireSession } from "@/lib/session";
 import { cn } from "@/lib/cn";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export default async function LibraryPage({
 }: {
   searchParams: Promise<{ page?: string; q?: string; type?: string; status?: string }>;
 }) {
+  await requireSession();
   const params = await searchParams;
   const pages = await listPages();
   const active = pages.find((page) => page.slug === params.page);

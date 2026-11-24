@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/empty";
 import { listPages } from "@/lib/data";
 import { bn } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { requireSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export default async function PagesScreen({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
+  await requireSession();
   const params = await searchParams;
   const pages = await listPages();
   if (pages.length === 0) return <EmptyState title="কোনো পেজ নেই" description="প্রথম পেজ যোগ করে ব্র্যান্ড কিট সেট করুন।" />;

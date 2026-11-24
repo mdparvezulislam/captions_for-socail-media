@@ -1,22 +1,31 @@
-import { headers } from "next/headers";
-import { getMemberByEmail } from "@/lib/data";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { getSession, SESSION_COOKIE, sessionCookieOptions, createSessionToken, roleForKey } from "@/lib/auth";
 import type { Session } from "@/lib/types";
 
-const DEV_FALLBACK_EMAIL = "owner@uniquestore.bd";
+export type { Session };
+export { getSession };
 
-/**
- * In production Cloudflare Access injects the authenticated user email.
- * Locally we fall back to the seeded owner so the app is usable instantly.
- */
-export async function getSession(): Promise<Session> {
-  const headerList = await headers();
-  const accessEmail = headerList.get("cf-access-authenticated-user-email");
-  const email = (accessEmail ?? process.env.DEV_USER_EMAIL ?? DEV_FALLBACK_EMAIL).toLowerCase();
-  const member = await getMemberByEmail(email).catch(() => null);
-  return {
-    email,
-    name: member?.name ?? "রাকিব হাসান",
-    role: member?.role ?? "owner",
-    isDemo: !accessEmail,
-  };
+/** Protected পেজগুলোর প্রথম লাইনে ডাকা হয় — সেশন না থাকলে /login। */
+export async function requireSession(): Promise<Session> {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  return session;
+}
+
+export async function currentSession(): Promise<Session | null> {
+  return getSession();
+}
+
+export async function loginWithKey(key: string): Promise<{ ok: boolean; message?: string }> {
+  const role = roleForKey(key);
+  if (!role) return { ok: false, message: "ভুল সিক্রেট কী" };
+  const cookieStore = await cookies();
+  cookieStore.set(SESSION_COOKIE, createSessionToken(role), sessionCookieOptions());
+  return { ok: true };
+}
+
+export async function logout(): Promise<void> {
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE);
 }

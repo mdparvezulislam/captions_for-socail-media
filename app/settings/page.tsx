@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { Badge } from "@/components/ui/badge";
+import { requireSession } from "@/lib/session";
 import { IconAlert, IconCheck } from "@/components/ui/icons";
 import { db, readyDb } from "@/lib/db";
 import { bn, bnNumber } from "@/lib/format";
@@ -12,6 +13,7 @@ function readEnv(key: string): string | undefined {
 }
 
 export default async function SettingsPage() {
+  await requireSession();
   await readyDb();
   const database = db();
   const [pages, products, captions, tokens] = await Promise.all([

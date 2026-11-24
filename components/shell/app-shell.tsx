@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { Page, Session } from "@/lib/types";
+import { logoutAction } from "@/lib/session-actions";
 import { initials } from "@/lib/format";
 import { NavLink } from "@/components/shell/nav-link";
 import { QuickSearch } from "@/components/shell/quick-search-modal";
@@ -50,9 +51,12 @@ export function AppShell({
   children,
 }: {
   pages: Page[];
-  session: Session;
+  session: Session | null;
   children: ReactNode;
 }) {
+  if (!session) {
+    return <div className="min-h-dvh">{children}</div>;
+  }
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line/80 px-4 py-6 lg:flex">
@@ -103,10 +107,15 @@ export function AppShell({
             <span className="min-w-0 flex-1 leading-tight">
               <span className="block truncate text-[12.5px] font-[580]">{session.name}</span>
               <span className="block text-[10.5px] text-ink-faint">
-                {session.role === "owner" ? "মালিক" : session.role === "admin" ? "অ্যাডমিন" : "মডারেটর"}
+                {session.role === "owner" ? "অ্যাডমিন" : session.role === "admin" ? "অ্যাডমিন" : "মডারেটর"}
                 {session.isDemo ? " · ডেমো" : ""}
               </span>
             </span>
+            <form action={logoutAction}>
+              <button type="submit" aria-label="লগআউট" title="লগআউট" className="text-[11px] text-ink-faint hover:text-berry">
+                বাহির
+              </button>
+            </form>
           </div>
         </div>
       </aside>

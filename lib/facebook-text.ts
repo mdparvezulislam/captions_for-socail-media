@@ -109,3 +109,27 @@ export function deriveKeyword(nameBn: string, category: string): string {
   if (latin && latin.length > 0) return latin[latin.length - 1];
   return KEYWORD_MAP[category] ?? "অর্ডার";
 }
+
+/** প্রোডাক্টের ডিসপ্লে ইমেজ সোর্স — রিয়েল ছবি থাকলে same-origin প্রক্সি, নাহলে জেনারেটেড আর্ট। */
+export function imageSrcFor(product: { imageUrl?: string | null; artSeed?: string; id?: string }): string {
+  if (product.imageUrl && product.imageUrl.startsWith("https://")) {
+    return `/api/image?url=${encodeURIComponent(product.imageUrl)}`;
+  }
+  return `/api/art/${encodeURIComponent(product.artSeed || product.id || "art")}`;
+}
+
+export interface GroupBlockInput {
+  orderUrl?: string | null;
+  whatsapp?: string | null;
+  warranty?: string | null;
+}
+
+/** গ্রুপ পোস্টে ক্যাপশনের নিচে যাওয়া অর্ডার-ব্লক। */
+export function groupOrderBlock(input: GroupBlockInput): string {
+  const parts: string[] = [];
+  if (input.orderUrl) parts.push(`🛒 অর্ডার লিংক: ${input.orderUrl}`);
+  if (input.whatsapp) parts.push(`📞 হটলাইন / WhatsApp: ${input.whatsapp}`);
+  parts.push("🚚 ঢাকায় ৳৬০ · ঢাকার বাইরে ৳১২০ · ১০০% ক্যাশ অন ডেলিভারি");
+  if (input.warranty) parts.push(`🛡️ ${input.warranty}`);
+  return parts.join("\n");
+}

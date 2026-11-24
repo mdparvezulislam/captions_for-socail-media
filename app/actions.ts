@@ -72,7 +72,7 @@ export async function saveCaptionAction(captionId: string, body: string): Promis
 
 export async function markPostedAction(captionId: string, posted: boolean): Promise<{ ok: boolean }> {
   const session = await getSession();
-  await markPosted(captionId, posted, session.email);
+  await markPosted(captionId, posted, session?.email ?? "system");
   refreshAll();
   return { ok: true };
 }
@@ -82,7 +82,7 @@ export async function syncUniStoreAction(pageSlug: string): Promise<{
   message: string;
 }> {
   const session = await getSession();
-  if (session.role === "moderator") return { ok: false, message: "শুধু অ্যাডমিন সিঙ্ক করতে পারেন" };
+  if (!session || session.role === "moderator") return { ok: false, message: "শুধু অ্যাডমিন সিঙ্ক করতে পারেন" };
 
   const page = await getPageBySlug(pageSlug);
   if (!page) return { ok: false, message: "পেজ পাওয়া যায়নি" };
@@ -99,7 +99,7 @@ export async function syncUniStoreAction(pageSlug: string): Promise<{
 
 export async function updatePageAction(formData: FormData): Promise<{ ok: boolean; message?: string }> {
   const session = await getSession();
-  if (session.role === "moderator") return { ok: false, message: "শুধু অ্যাডমিন পেজ সেটিংস বদলাতে পারেন" };
+  if (!session || session.role === "moderator") return { ok: false, message: "শুধু অ্যাডমিন পেজ সেটিংস বদলাতে পারেন" };
 
   const pageId = String(formData.get("pageId") ?? "");
   const existing = await getPageById(pageId);
@@ -151,7 +151,7 @@ export async function updatePageAction(formData: FormData): Promise<{ ok: boolea
 
 export async function addMemberAction(formData: FormData): Promise<{ ok: boolean; message?: string }> {
   const session = await getSession();
-  if (session.role === "moderator") return { ok: false, message: "অনুমতি নেই" };
+  if (!session || session.role === "moderator") return { ok: false, message: "অনুমতি নেই" };
 
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -178,7 +178,7 @@ export async function addMemberAction(formData: FormData): Promise<{ ok: boolean
 
 export async function removeMemberAction(memberId: string): Promise<{ ok: boolean; message?: string }> {
   const session = await getSession();
-  if (session.role !== "owner") return { ok: false, message: "শুধু মালিক টিম মেম্বার সরাতে পারেন" };
+  if (!session || session.role !== "owner") return { ok: false, message: "শুধু মালিক টিম মেম্বার সরাতে পারেন" };
   const database = await readyDb();
   const member = await database.prepare("SELECT role FROM members WHERE id = ?").bind(memberId).first<{ role: string }>();
   if (member?.role === "owner") return { ok: false, message: "মালিককে সরানো যাবে না" };
@@ -189,7 +189,7 @@ export async function removeMemberAction(memberId: string): Promise<{ ok: boolea
 
 export async function updateMemberRoleAction(memberId: string, role: string): Promise<{ ok: boolean }> {
   const session = await getSession();
-  if (session.role === "moderator") return { ok: false };
+  if (!session || session.role === "moderator") return { ok: false };
   if (!["admin", "moderator"].includes(role)) return { ok: false };
   (await readyDb()).prepare("UPDATE members SET role = ? WHERE id = ?").bind(role, memberId).run();
   revalidatePath("/team");

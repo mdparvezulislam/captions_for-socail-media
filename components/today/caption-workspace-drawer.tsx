@@ -21,7 +21,7 @@ import {
   regenerateAction,
   saveCaptionAction,
 } from "@/app/actions";
-import { formatForFacebook } from "@/lib/facebook-text";
+import { formatForFacebook, groupOrderBlock, imageSrcFor } from "@/lib/facebook-text";
 import { bn, bnNumber, bnRelative, taka } from "@/lib/format";
 
 import { cn } from "@/lib/cn";
@@ -158,14 +158,13 @@ export function CaptionWorkspaceDrawer({
     const page = data?.page;
     const tags = includeHashtags && page && page.hashtags.length > 0 ? page.hashtags : [];
     let raw = tags.length > 0 ? `${body}\n\n${tags.join(" ")}` : body;
-    if (groupMode) {
-      const product = data?.product;
-      const parts = [raw];
-      if (product?.enrich?.orderUrl) parts.push(`🛒 অর্ডার লিংক: ${product.enrich.orderUrl}`);
-      if (product?.enrich?.whatsapp) parts.push(`📞 হটলাইন / WhatsApp: ${product.enrich.whatsapp}`);
-      parts.push("🚚 ঢাকায় ৳৬০ · ঢাকার বাইরে ৳১২০ · ১০০% ক্যাশ অন ডেলিভারি");
-      if (product?.enrich?.warranty) parts.push(`🛡️ ${product.enrich.warranty}`);
-      raw = parts.join("\n");
+    if (groupMode && data?.product) {
+      const block = groupOrderBlock({
+        orderUrl: data.product.enrich?.orderUrl,
+        whatsapp: data.product.enrich?.whatsapp,
+        warranty: data.product.enrich?.warranty,
+      });
+      raw = `${raw}\n\n${block}`;
     }
     return formatForFacebook(raw, { bold: facebookBold });
   }
@@ -286,11 +285,11 @@ export function CaptionWorkspaceDrawer({
               <div className="flex items-start gap-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`/api/art/${encodeURIComponent(product.artSeed || product.id)}`}
-                  alt=""
+                  src={imageSrcFor(product)}
+                  alt={product.nameBn}
                   width={120}
                   height={120}
-                  className="h-16 w-16 shrink-0 rounded-[14px] object-cover"
+                  className="h-16 w-16 shrink-0 rounded-[14px] bg-paper-deep object-cover"
                 />
                 <div className="min-w-0 flex-1">
                   <h2 className="text-[16.5px] font-[650] leading-[1.4]">{product.nameBn}</h2>
@@ -344,17 +343,40 @@ export function CaptionWorkspaceDrawer({
 
               {/* গ্যালারি স্ট্রিপ */}
               <div className="mt-3 flex items-center gap-2">
-                {[1, 2, 3].map((variant) => (
-                  // eslint-disable-next-line @next/next/no-img-element
+                <a
+                  href={imageSrcFor(product)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group relative h-14 w-14 overflow-hidden rounded-[10px] ring-1 ring-line"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    key={variant}
-                    src={`/api/art/${encodeURIComponent(`${product.artSeed || product.id}-${variant}`)}`}
+                    src={imageSrcFor(product)}
                     alt=""
                     width={80}
                     height={80}
                     loading="lazy"
-                    className="h-14 w-14 rounded-[10px] object-cover ring-1 ring-line"
+                    className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
                   />
+                </a>
+                {[2, 3].map((variant) => (
+                  <a
+                    key={variant}
+                    href={imageSrcFor(product)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hidden h-14 w-14 overflow-hidden rounded-[10px] ring-1 ring-line sm:block"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={imageSrcFor(product)}
+                      alt=""
+                      width={80}
+                      height={80}
+                      loading="lazy"
+                      className="h-full w-full object-cover"
+                    />
+                  </a>
                 ))}
                 <button
                   type="button"
@@ -363,13 +385,15 @@ export function CaptionWorkspaceDrawer({
                 >
                   <IconImage size={14} /> গ্যালারি
                 </button>
-                <a
-                  href={`/api/art/${encodeURIComponent(product.artSeed || product.id)}`}
-                  download={`product-${product.sourceId}.svg`}
-                  className="inline-flex h-8 items-center gap-1 rounded-[10px] border border-line bg-card px-2.5 text-[11.5px] text-ink-soft hover:text-ink"
-                >
-                  ছবি ডাউনলোড
-                </a>
+                {product.imageUrl ? (
+                  <a
+                    href={imageSrcFor(product)}
+                    download={`product-${product.sourceId}.jpg`}
+                    className="inline-flex h-8 items-center gap-1 rounded-[10px] border border-line bg-card px-2.5 text-[11.5px] text-ink-soft hover:text-ink"
+                  >
+                    ছবি ডাউনলোড
+                  </a>
+                ) : null}
               </div>
 
               {/* হ্যাশট্যাগ টগল + রিজেনারেট */}
@@ -557,14 +581,14 @@ export function CaptionWorkspaceDrawer({
                 onClick={() => setGallery(false)}
                 role="presentation"
               >
-                <div className="grid grid-cols-3 gap-2">
-                  {[1, 2, 3].map((variant) => (
+                <div className="grid grid-cols-2 gap-2">
+                  {[product.imageUrl ?? product.artSeed].map((source) => (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      key={variant}
-                      src={`/api/art/${encodeURIComponent(`${product.artSeed || product.id}-${variant}`)}`}
-                      alt=""
-                      className="w-[30vw] max-w-[160px] rounded-[12px] sm:w-[160px]"
+                      key={String(source)}
+                      src={imageSrcFor(product)}
+                      alt={product.nameBn}
+                      className="w-[60vw] max-w-[280px] rounded-[12px] object-contain sm:w-[280px]"
                     />
                   ))}
                 </div>

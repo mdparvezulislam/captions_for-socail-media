@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/empty";
 import { IconAlert, IconClock, IconSpark } from "@/components/ui/icons";
 import { getPageStats, listPages, listTaskProducts } from "@/lib/data";
 import { bn, bnFullDate, dhakaDate } from "@/lib/format";
+import { requireSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export default async function TodayPage({
 }: {
   searchParams: Promise<{ page?: string; product?: string; batch?: string }>;
 }) {
+  await requireSession();
   const params = await searchParams;
   const pages = await listPages();
   if (pages.length === 0) {

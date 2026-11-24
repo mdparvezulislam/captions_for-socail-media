@@ -1,12 +1,19 @@
 import { MemberManager } from "@/components/team/member-manager";
 import { listMembers, listPages } from "@/lib/data";
-import { getSession } from "@/lib/session";
+import { requireSession, currentSession } from "@/lib/session";
 import { bn } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function TeamPage() {
-  const [members, pages, session] = await Promise.all([listMembers(), listPages(), getSession()]);
+  await requireSession();
+  const session = (await currentSession()) ?? {
+    email: "",
+    name: "অতিথি",
+    role: "moderator" as const,
+    isDemo: false,
+  };
+  const [members, pages] = await Promise.all([listMembers(), listPages()]);
   const moderators = members.filter((member) => member.role === "moderator").length;
   const admins = members.filter((member) => member.role === "admin").length;
 

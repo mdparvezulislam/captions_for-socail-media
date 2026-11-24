@@ -5,6 +5,7 @@ import { CaptionWorkspaceDrawer } from "@/components/today/caption-workspace-dra
 import { Badge } from "@/components/ui/badge";
 import { IconAlert, IconPin, IconSpark } from "@/components/ui/icons";
 import { bn, taka } from "@/lib/format";
+import { imageSrcFor } from "@/lib/facebook-text";
 import { cn } from "@/lib/cn";
 import type { Page } from "@/lib/types";
 import type { TaskProduct } from "@/lib/data";
@@ -157,7 +158,7 @@ export function ModeratorTaskGrid({
                   <div className="relative aspect-square overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={`/api/art/${encodeURIComponent(product.artSeed || product.id)}`}
+                      src={imageSrcFor(product)}
                       alt=""
                       width={240}
                       height={240}

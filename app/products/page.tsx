@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { PageTabs } from "@/components/shell/page-tabs";
 import { SyncButton } from "@/components/products/sync-button";
+import { imageSrcFor } from "@/lib/facebook-text";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty";
 import { IconArrowUpRight, IconSearch } from "@/components/ui/icons";
 import { getLastUsed, getPageStats, listCategories, listPages, listProducts } from "@/lib/data";
 import { bn, bnNumber, bnRelative, discountPercent, taka } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { requireSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,7 @@ export default async function ProductsPage({
 }: {
   searchParams: Promise<{ page?: string; q?: string; cat?: string }>;
 }) {
+  await requireSession();
   const params = await searchParams;
   const pages = await listPages();
   if (pages.length === 0) return <EmptyState title="পেজ নেই" description="আগে একটি পেজ যোগ করুন।" />;
@@ -117,12 +120,12 @@ export default async function ProductsPage({
                     <div className="flex min-w-0 items-center gap-3">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={`/api/art/${encodeURIComponent(product.artSeed || product.id)}`}
+                        src={imageSrcFor(product)}
                         alt=""
                         width={88}
                         height={88}
                         loading="lazy"
-                        className="h-11 w-11 shrink-0 rounded-[12px] object-cover"
+                        className="h-11 w-11 shrink-0 rounded-[12px] bg-paper-deep object-cover"
                       />
                       <span className="min-w-0">
                         <span className="block truncate text-[13.5px] font-[580]">{product.nameBn}</span>

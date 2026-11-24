@@ -8,6 +8,8 @@ import { getPageById, getProduct, getProductLastUsed, listProductCaptions } from
 import { captionCopyText } from "@/lib/facebook-text";
 import { bn, bnDate, bnRelative, discountPercent, taka } from "@/lib/format";
 import { CAPTION_TYPES } from "@/lib/types";
+import { imageSrcFor } from "@/lib/facebook-text";
+import { requireSession } from "@/lib/session";
 import { cn } from "@/lib/cn";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +21,7 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireSession();
   const { id } = await params;
   const product = await getProduct(id);
   if (!product) notFound();
@@ -46,11 +49,11 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={`/api/art/${encodeURIComponent(product.artSeed || product.id)}`}
-            alt=""
+            src={imageSrcFor(product)}
+            alt={product.nameBn}
             width={240}
             height={240}
-            className="h-24 w-24 shrink-0 rounded-[18px] object-cover sm:h-28 sm:w-28"
+            className="h-24 w-24 shrink-0 rounded-[18px] bg-paper-deep object-cover sm:h-28 sm:w-28"
           />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">

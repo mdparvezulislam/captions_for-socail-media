@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { productId?: string; page?: string; limit?: number; onlyNew?: boolean } = {};
+  let body: { productId?: string; page?: string; limit?: number; onlyNew?: boolean; force?: boolean } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     if (!product) return Response.json({ ok: false, error: "product not found" }, { status: 404 });
     const page = await getPageById(product.pageId);
     if (!page) return Response.json({ ok: false, error: "page not found" }, { status: 404 });
-    const captions = await ensureProductCaptions(page, product);
+    const captions = await ensureProductCaptions(page, product, { force: body.force === true });
     return Response.json({
       ok: true,
       product: product.nameBn,
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   const results: { product: string; types: string[]; models: string[] }[] = [];
 
   for (const product of target) {
-    const captions = await ensureProductCaptions(page, product);
+    const captions = await ensureProductCaptions(page, product, { force: body.force === true });
     results.push({
       product: product.nameBn,
       types: captions.map((caption) => caption.type),

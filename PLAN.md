@@ -689,3 +689,9 @@ product image → (opz.) Gemini edit: লাইফস্টাইল ব্য�
 | ফলব্যাক | নিয়ম ভাঙলেও দাম/দাবি নিরাপদ থাকলে Gemini-র লেখাই রাখা হয় — ডেমো টেক্সট শুধু শেষ উপায় |
 
 **খরচ:** এখন প্রোডাক্টপ্রতি ৩ কল (~৩x)। Flash Lite/3.5-এ দিনে ১৫ প্রোডাক্টে মাসিক খরচ এখনও ~$৩–৫; কোয়ালিটাই এখন প্রধান মেট্রিক।
+
+**অপারেটর নোট (গুরুত্বপূর্ণ):** `ensureProductCaptions` এখন শুধু **আজকের** ক্যাপশন ফেরত দেয়। পুরনো দিনের ক্যাপশন শুধু `avoid` হিসেবে ব্যবহৃত হয়। তাই আগের (v2) লেখা আর কখনো নিজে থেকে দেখাবে না — নতুন করে তৈরি হবে। জোর করে নতুন লেখাতে:
+```bash
+curl -X POST $APP/api/generate -H "authorization: Bearer $INTERNAL_JOB_TOKEN" \
+  -H "content-type: application/json" -d '{"page":"unique-store-bd","limit":10,"force":true}'
+```

@@ -109,6 +109,14 @@ export function structureForType(text: string, type: CaptionType): string {
       })
       .join("\n")
       .replace(/\n{3,}/g, "\n\n")
+      .split("\n")
+      .reduce<string[]>((acc, line) => {
+        // বুলেটের মাঝে অতিরিক্ত ফাঁকা লাইন থাকলে সরিয়ে দিই
+        if (line === "" && acc[acc.length - 1] === "") return acc;
+        acc.push(line);
+        return acc;
+      }, [])
+      .join("\n")
       .trim();
   }
   return text;

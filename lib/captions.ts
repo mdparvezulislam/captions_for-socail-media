@@ -356,13 +356,15 @@ export async function ensureProductCaptions(
     .all<Row>();
   const previousCaptions = (previousRows ?? []).map(mapCaption);
 
+  // আজকের ক্যাপশন থাকলে সেটাই ফেরত; পুরনো দিনের ক্যাপশন কেবল "avoid" হিসেবে ব্যবহার হয়
   if (!options.force) {
-    const latestByType = new Map<CaptionType, Caption>();
+    const todayByType = new Map<CaptionType, Caption>();
     for (const item of previousCaptions) {
-      if (!latestByType.has(item.type)) latestByType.set(item.type, item);
+      if (item.runDate !== date) continue;
+      if (!todayByType.has(item.type)) todayByType.set(item.type, item);
     }
-    if (latestByType.size >= 3) {
-      return (["image", "video", "problem"] as CaptionType[]).map((t) => latestByType.get(t)!);
+    if (todayByType.size >= 3) {
+      return (["image", "video", "problem"] as CaptionType[]).map((t) => todayByType.get(t)!);
     }
   }
 

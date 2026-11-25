@@ -1,5 +1,6 @@
 import { readyDb } from "@/lib/db";
 import { dhakaDate } from "@/lib/format";
+import { deriveKeyword } from "@/lib/facebook-text";
 import type { ProductEnrich } from "@/lib/types";
 
 /**
@@ -44,13 +45,27 @@ export interface UniStoreResponse {
 
 export const UNISTORE_SYNC_URL = "https://uniquestorebd.top/api/v1/products";
 
-export function firstBanglaSentence(text: string | undefined, max = 170): string {
+export function firstBanglaSentence(text: string | undefined, max = 150): string {
   if (!text) return "";
-  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
   const banglaLine =
-    lines.find((line) => /[\u0980-\u09FF]/.test(line) && !line.startsWith("•") && !line.startsWith("🔥")) ?? lines[0] ?? "";
-  const sentence = banglaLine.split("।")[0]?.trim() ?? "";
-  return sentence.length > max ? `${sentence.slice(0, max - 1).trimEnd()}…` : sentence;
+    lines.find(
+      (line) =>
+        /[\u0980-\u09FF]/.test(line) &&
+        !line.startsWith("•") &&
+        !line.startsWith("🔥") &&
+        !line.startsWith("🌐") &&
+        line.length > 20,
+    ) ??
+    lines[0] ??
+    "";
+  const clean = banglaLine.replace(/^[•\-*\d.\s]+/, "");
+  const sentence = clean.split("।")[0]?.trim() ?? "";
+  const value = sentence.length > 8 ? sentence : clean;
+  return value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value;
 }
 
 function splitHighlight(highlight: string): { label: string; text: string } {
@@ -93,15 +108,14 @@ export function mapUniStoreProduct(item: UniStoreProduct, pageId: string) {
     warranty: item.deliveryInfo?.warranty ?? undefined,
     images: galleryUrls,
   };
+  const glossaryKeyword = deriveKeyword(name, item.category?.name ?? "অন্যান্য");
   const keywordCandidate = name.match(/[A-Za-z][A-Za-z0-9-]{3,}/g) ?? [];
   const stop = new Set([
     "intelligence", "original", "premium", "quality", "warranty", "product", "genuine", "with", "for",
     "year", "years", "days", "edition", "wireless", "electric", "digital", "support", "brand", "store",
   ]);
   const meaningful = keywordCandidate.filter((word) => !stop.has(word.toLowerCase()));
-  if (meaningful.length > 0) {
-    enrich.keyword = meaningful.reduce((best, word) => (word.length > best.length ? word : best));
-  }
+  enrich.keyword = glossaryKeyword || (meaningful.length > 0 ? meaningful[0] : "");
 
   const sourceId = (item.sku?.trim() || item.id).trim();
   const baseForPercent = compareAt ?? price;

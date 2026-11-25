@@ -94,20 +94,36 @@ export function captionCopyText(body: string, hashtags: string[], options: CopyO
   return formatForFacebook(`${body}${tags}`, { bold: facebookBold });
 }
 
-const KEYWORD_MAP: Record<string, string> = {
-  ফ্যান: "Fan",
-  কিচেন: "Kitchen",
-  গ্যাজেট: "Gadget",
-  হোম: "Home",
-  বিউটি: "Beauty",
-  বেবি: "Baby",
+/** পণ্যের ধরন বোঝার শব্দভাণ্ডার — কমেন্ট-কীওয়ার্ড এর থেকে বেছে নেওয়া হয় */
+const PRODUCT_WORDS = [
+  "smartwatch", "watch", "earbuds", "earphone", "headphone", "speaker", "fan", "chopper",
+  "blender", "cooker", "kettle", "iron", "trimmer", "dryer", "straightener", "powerbank",
+  "power bank", "charger", "cable", "lamp", "light", "projector", "printer", "tablet",
+  "stroller", "bottle", "flask", "filter", "purifier", "vacuum", "cleaner", "massager",
+  "mouse", "keyboard", "holder", "stand", "bag", "wallet", "toy", "book", "camera",
+];
+
+const CATEGORY_MAP: Record<string, string> = {
+  ফ্যান: "Fan", কিচেন: "Kitchen", গ্যাজেট: "Gadget", হোম: "Home",
+  বিউটি: "Beauty", বেবি: "Baby", "Kids Zone": "Kids", Electronics: "Gadget",
+  "Home & Kitchen": "Home", "Home Appliances": "Home",
 };
 
-/** Comment-trigger keyword: English word from the name, else from the category. */
+/** Comment-trigger keyword: পণ্যের ধরন (smartwatch/earbuds...), নাহলে ব্র্যান্ড, নাহলে ক্যাটাগরি */
 export function deriveKeyword(nameBn: string, category: string): string {
+  const lower = nameBn.toLowerCase();
+  const known = PRODUCT_WORDS.find((word) => lower.includes(word));
+  if (known) {
+    const label = known.replace(/\s+/g, "");
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
   const latin = nameBn.match(/[A-Za-z][A-Za-z0-9-]{2,}/g);
-  if (latin && latin.length > 0) return latin[latin.length - 1];
-  return KEYWORD_MAP[category] ?? "অর্ডার";
+  if (latin && latin.length > 0) {
+    const stop = new Set(["with", "and", "for", "the", "kitchen", "original", "premium", "wireless"]);
+    const meaningful = latin.filter((word) => !stop.has(word.toLowerCase()));
+    return meaningful[0] ?? latin[0];
+  }
+  return CATEGORY_MAP[category] ?? "অর্ডার";
 }
 
 /** প্রোডাক্টের ডিসপ্লে ইমেজ সোর্স — রিয়েল ছবি থাকলে same-origin প্রক্সি, নাহলে জেনারেটেড আর্ট। */

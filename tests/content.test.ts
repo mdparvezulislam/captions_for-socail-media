@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPrompt, RESPONSE_SCHEMA } from "@/lib/ai/prompts";
+import { buildPrompt } from "@/lib/ai/prompts";
 import { demoCaptionSet, demoPosterCopy } from "@/lib/ai/demo";
 import { bnDate, bnNumber, dhakaDate, discountPercent, taka, wordCount } from "@/lib/format";
 import { posterSize, wrapLines } from "@/lib/poster";
@@ -55,7 +55,7 @@ const product: Product = {
 };
 
 describe("buildPrompt", () => {
-  const prompt = buildPrompt({ page, product, type: "image", angle: "benefit", avoid: ["পুরনো ক্যাপশন এক"] });
+  const prompt = buildPrompt({ page, product, type: "image", avoid: ["পুরনো ক্যাপশন এক"] });
 
   it("includes the real price and brand voice", () => {
     expect(prompt.user).toContain("৳১,২৯০");
@@ -68,15 +68,19 @@ describe("buildPrompt", () => {
   });
 
   it("forbids invented facts and banned claims", () => {
-    expect(prompt.system).toContain("বানিয়ে লিখবে না");
+    expect(prompt.system).toContain("কোনো তথ্য বানাবে না");
     expect(prompt.system).toContain("১০০% গ্যারান্টি");
   });
 
-  it("declares a structured schema with all keys", () => {
-    const properties = RESPONSE_SCHEMA.properties as Record<string, unknown>;
-    expect(Object.keys(properties)).toEqual(
-      expect.arrayContaining(["image_caption", "video_caption", "problem_caption", "hashtags", "poster"]),
-    );
+  it("declares a per-type schema with caption, hashtags and poster", () => {
+    const properties = prompt.responseSchema.properties as Record<string, unknown>;
+    expect(Object.keys(properties)).toEqual(expect.arrayContaining(["caption", "hashtags", "comment_keyword", "poster"]));
+  });
+
+  it("bans AI-tell phrases and verbatim feature copying", () => {
+    expect(prompt.user).toContain("চমৎকার");
+    expect(prompt.system).toContain("হুবহু তুলবে না");
+    expect(prompt.system).toContain("ভাবনাটা আউটপুটে লিখবে না");
   });
 });
 

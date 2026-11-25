@@ -6,6 +6,8 @@ export interface GeminiRequest {
   schema: Record<string, unknown>;
   temperature?: number;
   timeoutMs?: number;
+  /** >0 হলে মডেল আগে ভেবে নেবে (গবেষণা-ধাঁচের লেখার জন্য) */
+  thinkingBudget?: number;
 }
 
 export interface GeminiResponse {
@@ -49,15 +51,16 @@ export async function callGemini(request: GeminiRequest): Promise<GeminiResponse
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const started = Date.now();
 
+  const thinkingBudget = Math.max(0, request.thinkingBudget ?? 0);
   const generationConfig: Record<string, unknown> = {
-    temperature: request.temperature ?? 0.85,
+    temperature: request.temperature ?? 0.95,
     responseMimeType: "application/json",
     responseSchema: request.schema,
-    maxOutputTokens: 2800,
+    maxOutputTokens: thinkingBudget > 0 ? 4200 : 2400,
   };
-  // 2.5-এর "thinking" ডিফল্ট চালু — সেটাই maxOutputTokens খেয়ে JSON কেটে দেয়। ক্যাপশনে দরকার নেই।
-  if (model.startsWith("gemini-2.5")) {
-    generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  // thinking বন্ধ রাখলে JSON কাটে না; চালু রাখলে লেখা ভালো হয় কিন্তু টোকেন খায়
+  if (model.startsWith("gemini-2.5") || model.startsWith("gemini-3")) {
+    generationConfig.thinkingConfig = { thinkingBudget };
   }
 
   let response: Response;
@@ -80,6 +83,15 @@ export async function callGemini(request: GeminiRequest): Promise<GeminiResponse
     throw new GeminiError(timedOut ? "Gemini অনুরোধ সময় শেষ (১৬s)" : `Gemini অনুরোধ ব্যর্থ: ${String(error)}`, {
       retryable: true,
     });
+  }
+
+  if (response.status === 400) {
+    const detail = (await response.text().catch(() => "")).slice(0, 500);
+    if (/thinking|thinkingConfig|thinkingBudget/i.test(detail) && thinkingBudget > 0) {
+      // এই মডেল thinking বাজেট নেয় না — বন্ধ করে আবার চেষ্টা
+      return callGemini({ ...request, thinkingBudget: 0 });
+    }
+    throw new GeminiError(`Gemini HTTP 400: ${detail}`, { status: 400, retryable: false });
   }
 
   if (!response.ok) {

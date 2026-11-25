@@ -76,6 +76,29 @@ describe("validateCaption", () => {
     expect(result.wordCount).toBeGreaterThanOrEqual(35);
   });
 
+  it("flags clichés as soft issues without failing the caption", () => {
+    const result = validateCaption({
+      body: `${goodBody}\nএটা সত্যিই চমৎকার।`,
+      type: "image",
+      product,
+      recentBodies: [],
+      hashtags: ["#ফ্যান", "#অফার", "#কিনুন"],
+    });
+    expect(result.soft.join(" ")).toContain("ক্লিশে");
+    expect(result.ok).toBe(true);
+  });
+
+  it("detects verbatim feature copying", () => {
+    const result = validateCaption({
+      body: `${goodBody}\n✅ ফুল চার্জে ৬-৮ ঘণ্টা ব্যাকআপ`,
+      type: "image",
+      product,
+      recentBodies: [],
+      hashtags: ["#ফ্যান", "#অফার", "#কিনুন"],
+    });
+    expect(result.copiedLines.length + result.soft.length).toBeGreaterThan(0);
+  });
+
   it("rejects a banned guarantee claim", () => {
     const result = validateCaption({
       body: `${goodBody}\n১০০% গ্যারান্টি সারাজীবন`,

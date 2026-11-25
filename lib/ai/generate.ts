@@ -1,9 +1,8 @@
 import type { CaptionMeta, CaptionType, Page, PosterCopy, Product } from "@/lib/types";
-import { demoCaptionSet, demoPosterCopy } from "@/lib/ai/demo";
-import { buildPrompt, type Angle } from "@/lib/ai/prompts";
+import { demoCaptionSet, demoPosterCopy, commentKeyword } from "@/lib/ai/demo";
+import { buildPrompt } from "@/lib/ai/prompts";
 import { callGemini, DEFAULT_GEMINI_MODEL, GeminiError } from "@/lib/ai/gemini";
-import { validateCaption } from "@/lib/ai/validate";
-import { commentKeyword } from "@/lib/ai/demo";
+import { crossCheck, validateCaption } from "@/lib/ai/validate";
 
 export interface CaptionDraft {
   type: CaptionType;
@@ -14,7 +13,7 @@ export interface CaptionDraft {
 
 export interface GenerateOutcome {
   drafts: CaptionDraft[];
-  source: "gemini" | "demo";
+  source: "gemini" | "demo" | "mixed";
   model: string;
   tokensIn: number;
   tokensOut: number;
@@ -30,88 +29,113 @@ export interface GenerateInput {
   model?: string;
   instruction?: string;
   type?: CaptionType;
-  variationSeed?: string;
-  temperature?: number;
 }
 
-const ANGLES: Angle[] = ["benefit", "emotional", "urgency"];
+const FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
+const TYPES: CaptionType[] = ["image", "video", "problem"];
 
-// Ordered so flagship Flash runs first when quota is available, and high-capacity
-// Flash-Lite models run at the tail (so a dead 429 flagship never masks a retryable 503).
-const FALLBACK_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-3.5-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-flash-lite-latest",
-  "gemini-3.1-flash-lite",
-];
-
-// Per-isolate cooldown for models whose daily quota is exhausted or deprecated (5 min TTL).
-const COOLDOWN_MS = 5 * 60 * 1000;
-const modelCooldownUntil = new Map<string, number>();
+/** ধরন অনুযায়ী ভাবনার বাজেট — লম্বা লেখায় বেশি ভাবা দরকার */
+const THINKING: Record<CaptionType, number> = { image: 768, video: 192, problem: 1024 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**
- * Smart multi-model fallback:
- * - Immediately advances on 429 daily-quota exhaustion or 404 deprecated model (and cools down for 5 min)
- * - Retries transient 503 high-demand spikes briefly before falling over to the next Gemini model
- */
 async function callWithFallback(
   params: Omit<Parameters<typeof callGemini>[0], "model">,
   primaryModel: string,
 ): Promise<{ response: Awaited<ReturnType<typeof callGemini>>; model: string }> {
-  const fullChain = [primaryModel, ...FALLBACK_MODELS.filter((model) => model !== primaryModel)];
-  const now = Date.now();
-  const activeChain = fullChain.filter((model) => (modelCooldownUntil.get(model) ?? 0) <= now);
-  const chain = activeChain.length > 0 ? activeChain : ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", primaryModel];
+  const chain = [primaryModel, ...FALLBACK_MODELS.filter((model) => model !== primaryModel)];
   let lastError: GeminiError | null = null;
 
   for (const model of chain) {
-    const isFastLite = model === "gemini-3.5-flash-lite" || model === "gemini-flash-lite-latest";
-    const maxAttempts = isFastLite ? 3 : 1;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const response = await callGemini({ ...params, model });
-        modelCooldownUntil.delete(model);
         return { response, model };
       } catch (error) {
-        if (!(error instanceof GeminiError)) throw error;
+        if (!(error instanceof GeminiError) || !error.retryable) throw error;
         lastError = error;
-
-        if (error.quotaExhausted || error.notFound) {
-          modelCooldownUntil.set(model, Date.now() + COOLDOWN_MS);
-          break; // skip immediately to next model — retrying won't help
-        }
-
-        if (!error.retryable) throw error;
-        if (attempt + 1 < maxAttempts) {
-          await sleep(600 + Math.floor(Math.random() * 400));
-        }
+        await sleep(900 * (attempt + 1));
       }
     }
   }
   throw lastError ?? new GeminiError("Gemini unavailable");
 }
 
-function angleFor(productId: string): Angle {
-  let sum = 0;
-  for (const char of productId) sum += char.charCodeAt(0);
-  return ANGLES[sum % ANGLES.length];
+function normalizeNewlines(text: string): string {
+  return text
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\r/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function asText(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value.trim() : fallback;
+  return typeof value === "string" ? normalizeNewlines(value) : fallback;
 }
 
-function asTags(value: unknown, fallback: string[]): string[] {
+/**
+ * মডেল মাঝে মাঝে সব লাইন একসাথে লেখে — বুলেট ও CTA আলাদা লাইনে ভেঙে দিই।
+ * (ইতিমধ্যে ঠিকভাবে ভাঙা ক্যাপশনে কিছু বদলায় না।)
+ */
+/** ধরন অনুযায়ী লাইন-গঠন নিশ্চিত করা (ভিডিও = ৩–৪ শক্ত লাইন, বাকিগুলোতে ফাঁকা লাইন) */
+export function structureForType(text: string, type: CaptionType): string {
+  if (type === "video" && (text.match(/\n/g) ?? []).length <= 1) {
+    const sentences = text
+      .split(/(?<=।)\s+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean);
+    if (sentences.length >= 2) {
+      const lines: string[] = [];
+      lines.push(sentences[0]);
+      const middle = sentences.slice(1, -1);
+      if (middle.length > 0) lines.push(middle.join(" "));
+      lines.push(sentences[sentences.length - 1]);
+      return lines.slice(0, 4).join("\n");
+    }
+  }
+  if (type !== "video") {
+    return text
+      .replace(/([^\n])\n(✅)/g, "$1\n\n$2")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+  return text;
+}
+
+export function reflowCaption(text: string): string {
+  let value = text.replace(/[ \t]+/g, " ").trim();
+  const newlines = (value.match(/\n/g) ?? []).length;
+  if (newlines >= 2) return value;
+
+  value = value
+    .replace(/\s*(✅)/g, "\n$1")
+    .replace(/\s*(কমেন্টে\s)/g, "\n\n$1")
+    .replace(/\s*(ইনবক্স করুন)/g, "\n$1")
+    .replace(/\s*(বিস্তারিত জানতে|দাম জানতে|অর্ডার করতে|স্টক শেষ)/g, "\n$1");
+
+  value = value.replace(/\n{2,}/g, "\n").replace(/\n(✅)/, "\n\n$1");
+  // "- ✅ ..." ধরনের বুলেট থেকে ড্যাশ সরিয়ে দিই
+  value = value
+    .split("\n")
+    .map((line) => line.replace(/^\s*[-–—•]\s*(✅)/, "$1"))
+    .join("\n");
+  return value.trim();
+}
+
+function asTags(value: unknown, fallback: string[], type: CaptionType): string[] {
   if (!Array.isArray(value)) return fallback;
   const tags = value
     .filter((tag): tag is string => typeof tag === "string")
     .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`))
     .map((tag) => tag.replace(/\s+/g, ""))
-    .filter((tag) => tag.length > 1);
-  return tags.length >= 3 ? tags.slice(0, 8) : fallback;
+    .filter((tag) => tag.length > 2);
+
+  // ধরন অনুযায়ী হ্যাশট্যাগ আলাদা রাখা — একই সেট তিনবার দেখালে AI-গন্ধ বেরিয়ে যায়
+  const mixed = Array.from(new Set([...tags, ...fallback]));
+  if (type === "video") return mixed.slice(0, 4);
+  if (type === "problem") return mixed.slice(-4);
+  return mixed.slice(0, 5);
 }
 
 function asPoster(value: unknown, fallback: PosterCopy): PosterCopy {
@@ -125,117 +149,229 @@ function asPoster(value: unknown, fallback: PosterCopy): PosterCopy {
   };
 }
 
-function posterFromDrafts(page: Page, product: Product, raw: unknown): PosterCopy {
-  const fallback = demoPosterCopy(product, page);
-  return asPoster(raw, fallback);
+interface SingleResult {
+  type: CaptionType;
+  caption: string;
+  hashtags: string[];
+  keyword?: string;
+  poster?: unknown;
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
 }
 
-export async function generateCaptionDrafts(input: GenerateInput): Promise<GenerateOutcome> {
-  const started = Date.now();
-  const { page, product } = input;
-  const fallbackPoster = demoPosterCopy(product, page);
-  const demo = demoCaptionSet(product, page).map((item) => ({
-    ...item,
-    hashtags: page.hashtags,
-    meta: { ...item.meta, poster: fallbackPoster },
-  }));
-
-  if (!input.apiKey) {
-    return {
-      drafts: demo,
-      source: "demo",
-      model: "demo",
-      tokensIn: 0,
-      tokensOut: 0,
-      issues: [],
-      latencyMs: Date.now() - started,
-    };
-  }
-
+async function generateOneType(input: {
+  page: Page;
+  product: Product;
+  type: CaptionType;
+  apiKey: string;
+  model: string;
+  avoid: string[];
+  siblings: string[];
+  instruction?: string;
+}): Promise<SingleResult> {
   const prompt = buildPrompt({
-    page,
-    product,
-    type: input.type ?? "image",
-    angle: angleFor(input.variationSeed ? `${product.id}:${input.variationSeed}` : product.id),
-    avoid: input.avoid?.slice(0, 10) ?? [],
+    page: input.page,
+    product: input.product,
+    type: input.type,
+    avoid: input.avoid,
+    siblingBodies: input.siblings,
   });
 
   const user = input.instruction
     ? `${prompt.user}\n\nঅতিরিক্ত নির্দেশনা (অবশ্যই মানতে হবে): ${input.instruction}`
     : prompt.user;
 
-  const { response, model: usedModel } = await callWithFallback(
+  const { response, model } = await callWithFallback(
     {
       apiKey: input.apiKey,
       system: prompt.system,
       user,
       schema: prompt.responseSchema,
-      temperature: input.temperature ?? 0.88,
+      thinkingBudget: THINKING[input.type],
+      timeoutMs: 40_000,
     },
-    input.model ?? DEFAULT_GEMINI_MODEL,
+    input.model,
   );
 
   const json = response.json as Record<string, unknown>;
-  const video = (json.video_caption ?? {}) as Record<string, unknown>;
-  const hashtags = asTags(json.hashtags, page.hashtags);
-  const poster = posterFromDrafts(page, product, json.poster);
-  const issues: string[] = [];
-
-  const keyword = asText(json.comment_keyword, commentKeyword(product));
-  const videoStory = [asText(video.hook), asText(video.body)].filter(Boolean).join("\n");
-  const videoCta = asText(video.cta);
-  const videoFormatted = [videoStory, videoCta].filter(Boolean).join("\n\n");
-  // Never allow robotic "সমাধান:" label prefix in Caption 3
-  const cleanProblem = asText(json.problem_caption).replace(/(^|\n)\s*সমাধান\s*[:：\-–—]\s*/g, "$1");
-  const raw: Record<CaptionType, string> = {
-    image: asText(json.image_caption),
-    video: videoFormatted,
-    problem: cleanProblem,
+  return {
+    type: input.type,
+    caption: structureForType(reflowCaption(asText(json.caption)), input.type),
+    hashtags: Array.isArray(json.hashtags) ? (json.hashtags as string[]) : [],
+    keyword: asText(json.comment_keyword) || undefined,
+    poster: json.poster,
+    model,
+    tokensIn: response.tokensIn,
+    tokensOut: response.tokensOut,
   };
+}
 
-  const drafts: CaptionDraft[] = (["image", "video", "problem"] as CaptionType[]).map((type) => {
-    const demoDraft = demo.find((item) => item.type === type)!;
-    let body = raw[type];
-    let meta: CaptionMeta = {
-      ...demoDraft.meta,
-      source: "gemini",
-      poster,
-      keyword,
-      hook: type === "video" ? asText(video.hook, demoDraft.meta.hook) : demoDraft.meta.hook,
-      cta: asText(video.cta, page.ctaText),
+function demoDraft(page: Page, product: Product, type: CaptionType): CaptionDraft {
+  const fallbackPoster = demoPosterCopy(product, page);
+  const draft = demoCaptionSet(product, page).find((item) => item.type === type)!;
+  return {
+    type,
+    body: draft.body,
+    hashtags: page.hashtags,
+    meta: { ...draft.meta, poster: fallbackPoster, source: "demo", keyword: commentKeyword(product) },
+  };
+}
+
+function acceptedLines(drafts: CaptionDraft[]): string[] {
+  return drafts.flatMap((draft) => draft.body.split("\n").map((line) => line.trim()).filter((line) => line.length > 8));
+}
+
+/**
+ * প্রতি প্রোডাক্টে ৩টি আলাদা LLM কল — এক কলে তিনটা লিখলে লেখাগুলো একই ছাঁচে পড়ে।
+ * তারপর তিনটে ক্যাপশন পরস্পরের সাথে মিলিয়ে দেখা হয়; মিলে গেলে সেই ধরনটা
+ * অন্য ধরনগুলোর লাইন "নিষিদ্ধ" করে আবার লেখা হয়।
+ */
+export async function generateCaptionDrafts(input: GenerateInput): Promise<GenerateOutcome> {
+  const started = Date.now();
+  const { page, product } = input;
+  const types = input.type ? [input.type] : TYPES;
+
+  if (!input.apiKey) {
+    return {
+      drafts: types.map((type) => demoDraft(page, product, type)),
+      source: "demo",
+      model: "demo",
+      tokensIn: 0,
+      tokensOut: 0,
+      issues: ["API key নেই — ডেমো জেনারেটর"],
+      latencyMs: Date.now() - started,
     };
+  }
 
-    if (!body || body.length < 24) {
-      issues.push(`${type}: খালি বা খুব ছোট আউটপুট`);
-      body = demoDraft.body;
-      meta = { ...meta, source: "demo" };
-    } else {
-      const validation = validateCaption({
-        body,
-        type,
-        product,
-        recentBodies: input.avoid ?? [],
-        hashtags,
-      });
-      if (!validation.ok) {
-        issues.push(`${type}: ${validation.issues.join(", ")}`);
-        // Never ship a caption with a wrong price or a banned claim — fall back to the safe draft.
-        if (validation.issues.some((issue) => /দাম|নিষিদ্ধ/.test(issue))) {
-          body = demoDraft.body;
-          meta = { ...meta, source: "demo" };
+  const siblings: string[] = [];
+  const drafts: CaptionDraft[] = [];
+  const issues: string[] = [];
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let model = input.model ?? DEFAULT_GEMINI_MODEL;
+  let geminiCount = 0;
+
+  for (const type of types) {
+    let attempt = 0;
+    let accepted: CaptionDraft | null = null;
+    let bestEffort: { body: string; hashtags: string[]; keyword?: string; poster?: unknown } | null = null;
+
+    while (attempt < 2 && !accepted) {
+      attempt++;
+      let result: SingleResult;
+      try {
+        result = await generateOneType({
+          page,
+          product,
+          type,
+          apiKey: input.apiKey,
+          model: input.model ?? DEFAULT_GEMINI_MODEL,
+          avoid: input.avoid ?? [],
+          siblings: [...siblings, ...(input.instruction ? [] : [])],
+          instruction:
+            attempt === 1
+              ? input.instruction
+              : `${input.instruction ?? ""} আগের লেখায় অন্য ক্যাপশনের সাথে লাইন/CTA/শুরু মিলে গিয়েছিল। সম্পূর্ণ ভিন্ন কোণ, ভিন্ন শুরু আর ভিন্ন শেষ লাইন লেখো।`,
+        });
+        model = result.model;
+        tokensIn += result.tokensIn;
+        tokensOut += result.tokensOut;
+
+        const hashtags = asTags(result.hashtags, page.hashtags, type);
+        const validation = validateCaption({
+          body: result.caption,
+          type,
+          product,
+          recentBodies: input.avoid ?? [],
+          hashtags,
+        });
+
+        const conflicts: string[] = [];
+        for (const other of drafts) {
+          const check = crossCheck(result.caption, other.body);
+          if (check.sharedLines.length > 0) {
+            conflicts.push(`${other.type} ক্যাপশনের সাথে লাইন মিলেছে`);
+          }
+          if (check.sameOpening) conflicts.push(`${other.type} ক্যাপশনের মতো শুরু`);
+          if (check.sameCta) conflicts.push(`${other.type} ক্যাপশনের মতো CTA`);
+          if (check.similarity >= 0.55) conflicts.push(`${other.type} ক্যাপশনের সাথে খুব মিল`);
         }
+        if (hashtags.join(" ") === drafts[0]?.hashtags.join(" ") && drafts.length > 0) {
+          conflicts.push("হ্যাশট্যাগ আগের ক্যাপশনের মতোই");
+        }
+
+        // দাম/নিষিদ্ধ দাবি ছাড়া অন্য সমস্যা হলে লেখাটা অন্তত দেখানোর যোগ্য
+        const unsafe = validation.hard.some(
+          (issue) => issue.includes("দাম") || issue.includes("নিষিদ্ধ") || issue.includes("খুব মিল"),
+        );
+        if (!unsafe && result.caption.split(/\s+/).length >= 30) {
+          bestEffort = { body: result.caption, hashtags, keyword: result.keyword, poster: result.poster };
+        }
+
+        if (validation.hard.length > 0) {
+          issues.push(`${type}: ${validation.hard.join(", ")}`);
+        } else if (conflicts.length > 0) {
+          issues.push(`${type}: ${conflicts.join(", ")}`);
+        } else {
+          if (validation.soft.length > 0) issues.push(`${type} (সফট): ${validation.soft.join(", ")}`);
+          accepted = {
+            type,
+            body: result.caption,
+            hashtags,
+            meta: {
+              keyword: result.keyword ?? commentKeyword(product),
+              cta: result.caption.split("\n").filter(Boolean).slice(-1)[0],
+              angle: type,
+              source: "gemini",
+              poster: type === "image" ? asPoster(result.poster, demoPosterCopy(product, page)) : undefined,
+            },
+          };
+          geminiCount++;
+        }
+      } catch (error) {
+        issues.push(`${type}: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`);
       }
     }
 
-    return { type, body, hashtags, meta };
-  });
+    if (!accepted) {
+      if (bestEffort) {
+        accepted = {
+          type,
+          body: bestEffort.body,
+          hashtags: asTags(bestEffort.hashtags, page.hashtags, type),
+          meta: {
+            keyword: bestEffort.keyword ?? commentKeyword(product),
+            cta: bestEffort.body.split("\n").filter(Boolean).slice(-1)[0],
+            angle: type,
+            source: "gemini",
+            poster: type === "image" ? asPoster(bestEffort.poster, demoPosterCopy(product, page)) : undefined,
+          },
+        };
+        geminiCount++;
+        issues.push(`${type}: নিয়ম ভাঙলেও Gemini-র লেখা রাখা হয়েছে`);
+      } else {
+        accepted = demoDraft(page, product, type);
+        issues.push(`${type}: ফলব্যাক ডেমো লেখা ব্যবহার হয়েছে`);
+      }
+    }
+
+    accepted.hashtags = asTags(accepted.hashtags, page.hashtags, type);
+    drafts.push(accepted);
+    siblings.push(...acceptedLines([accepted]));
+  }
+
+  // image কল না হলে পোস্টার কপি ডেমো থেকে
+  for (const draft of drafts) {
+    if (!draft.meta.poster) draft.meta.poster = demoPosterCopy(product, page);
+  }
 
   return {
     drafts,
-    source: "gemini",
-    model: usedModel,
-    tokensIn: response.tokensIn,
-    tokensOut: response.tokensOut,
+    source: geminiCount === types.length ? "gemini" : geminiCount === 0 ? "demo" : "mixed",
+    model,
+    tokensIn,
+    tokensOut,
     issues,
     latencyMs: Date.now() - started,
   };

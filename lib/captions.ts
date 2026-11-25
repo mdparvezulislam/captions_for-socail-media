@@ -281,6 +281,16 @@ export async function generateBatch(page: Page, size?: number): Promise<BatchOut
         .prepare("INSERT OR IGNORE INTO daily_selections (run_id, product_id, position, score, pinned) VALUES (?, ?, ?, ?, 0)")
         .bind(runId, item.product.id, index, item.score)
         .run();
+      if (outcome.issues.length > 0) {
+        await logGeneration({
+          pageId: page.id,
+          productId: item.product.id,
+          stage: "quality",
+          status: "warn",
+          error: outcome.issues.join(" | ").slice(0, 900),
+          model: outcome.model,
+        });
+      }
       created += 3;
       await logGeneration({
         pageId: page.id,
@@ -373,8 +383,6 @@ export async function ensureProductCaptions(
     apiKey: apiKey(),
     model: modelName(),
     instruction: regenInstruction,
-    variationSeed: regenNonce,
-    temperature: options.force ? 0.96 : 0.88,
   });
 
   const captions = await persistDrafts({
@@ -429,8 +437,6 @@ export async function regenerateOne(caption: Caption, instruction?: string): Pro
       instruction ??
       "আগের ক্যাপশনের চেয়ে সম্পূর্ণ নতুন হুক, নতুন শব্দচয়ন ও নতুন অ্যাঙ্গেলে লেখো। আগের কোনো বাক্য হুবহু কপি করবে না।",
     type: caption.type,
-    variationSeed: `regen-${Date.now().toString(36)}`,
-    temperature: 0.96,
   });
 
   const draft = outcome.drafts.find((item) => item.type === caption.type) ?? outcome.drafts[0];

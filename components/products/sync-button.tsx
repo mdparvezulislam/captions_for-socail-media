@@ -15,8 +15,9 @@ export function SyncButton({ pageSlug }: { pageSlug: string }) {
   return (
     <div className="flex flex-col items-start gap-1.5">
       <Button
+        size="sm"
         variant="quiet"
-        icon={<IconRefresh size={15} className={pending ? "animate-spin" : ""} />}
+        icon={<IconRefresh size={14} className={pending ? "animate-spin" : ""} />}
         disabled={pending}
         onClick={() =>
           startTransition(async () => {

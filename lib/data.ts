@@ -121,6 +121,52 @@ export async function getPageById(pageId: string): Promise<Page | null> {
   return row ? mapPage(row) : null;
 }
 
+export interface PagedProducts {
+  items: Product[];
+  total: number;
+  page: number;
+  perPage: number;
+  totalPages: number;
+}
+
+/** পেজিনেশন + সার্চ + ক্যাটাগরি ফিল্টার সহ প্রোডাক্ট তালিকা */
+export async function listProductsPaged(
+  pageId: string,
+  options: { search?: string; category?: string; page?: number; perPage?: number } = {},
+): Promise<PagedProducts> {
+  const db = await readyDb();
+  const perPage = Math.min(Math.max(options.perPage ?? 20, 5), 50);
+  const pageNumber = Math.max(1, options.page ?? 1);
+  const clauses = ["page_id = ?", "is_active = 1"];
+  const params: unknown[] = [pageId];
+  if (options.search?.trim()) {
+    clauses.push("(name_bn LIKE ? OR category LIKE ? OR problem_bn LIKE ? OR source_id LIKE ?)");
+    const like = `%${options.search.trim()}%`;
+    params.push(like, like, like, like);
+  }
+  if (options.category && options.category !== "all") {
+    clauses.push("category = ?");
+    params.push(options.category);
+  }
+  const where = clauses.join(" AND ");
+
+  const countRow = await db
+    .prepare(`SELECT COUNT(*) AS n FROM products WHERE ${where}`)
+    .bind(...params)
+    .first<{ n: number }>();
+  const total = num(countRow?.n);
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const safePage = Math.min(pageNumber, totalPages);
+  const offset = (safePage - 1) * perPage;
+
+  const { results } = await db
+    .prepare(`SELECT * FROM products WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+    .bind(...params, perPage, offset)
+    .all<Row>();
+
+  return { items: (results ?? []).map(mapProduct), total, page: safePage, perPage, totalPages };
+}
+
 export async function listProducts(
   pageId: string,
   options: { search?: string; category?: string } = {},
@@ -129,9 +175,9 @@ export async function listProducts(
   const clauses = ["page_id = ?", "is_active = 1"];
   const params: unknown[] = [pageId];
   if (options.search?.trim()) {
-    clauses.push("(name_bn LIKE ? OR category LIKE ? OR problem_bn LIKE ?)");
+    clauses.push("(name_bn LIKE ? OR category LIKE ? OR problem_bn LIKE ? OR source_id LIKE ?)");
     const like = `%${options.search.trim()}%`;
-    params.push(like, like, like);
+    params.push(like, like, like, like);
   }
   if (options.category && options.category !== "all") {
     clauses.push("category = ?");

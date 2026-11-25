@@ -36,20 +36,24 @@ export default async function TodayPage({
   const demoMode = !isLiveAiAvailable();
 
   return (
-    <div className="flex flex-col gap-5">
-      <header className="animate-fade">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="flex items-center gap-2 text-[11px] font-[620] uppercase tracking-[0.16em] text-ink-faint">
+    <div className="flex flex-col gap-2.5 sm:gap-4">
+      <header className="animate-fade flex flex-col gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-[10.5px] font-[620] uppercase tracking-[0.14em] text-ink-faint">
               <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-              ডেইলি মডারেটর টাস্ক লিস্ট · {bnFullDate(date)}
+              {bnFullDate(date)}
+              <span className="text-ink-faint/60">·</span>
+              <span className="num text-moss">{bn(readyCount)} রেডি</span>
+              <span className="text-ink-faint/60">·</span>
+              <span className="num text-berry">{bn(remaining)} বাকি</span>
+              {demoMode ? <Badge tone="sky">ডেমো</Badge> : null}
             </p>
-            <h1 className="mt-2 text-[24px] leading-[1.25] sm:text-[30px]">
+            <h1 className="mt-0.5 text-[20px] leading-[1.25] sm:text-[26px]">
               🔥 আজ কী পোস্ট করবেন
             </h1>
-            <p className="mt-1.5 max-w-[58ch] text-[13px] leading-[1.8] text-ink-soft">
-              প্রায়োরিটি: ক্যাপশন বাকি আগে ➜ স্কোর ➜ নতুন পণ্য। যেকোনো প্রোডাক্টে ক্লিক করলেই
-              তাৎক্ষণিক ক্যাপশন স্টুডিও খুলবে — পেজ রিলোড ছাড়াই।
+            <p className="mt-0.5 hidden max-w-[58ch] text-[12.5px] leading-[1.6] text-ink-soft sm:block">
+              প্রায়োরিটি: ক্যাপশন বাকি আগে ➜ স্কোর ➜ নতুন পণ্য। যেকোনো প্রোডাক্টে ক্লিক করলেই তাৎক্ষণিক ক্যাপশন স্টুডিও খুলবে।
             </p>
           </div>
           <GenerateMore
@@ -57,25 +61,11 @@ export default async function TodayPage({
             count={Math.min(active.dailyCount, remaining || active.dailyCount)}
             label={remaining > 0 ? `${bn(Math.min(remaining, active.dailyCount))}টার ক্যাপশন তৈরি করুন` : "আরেক ব্যাচ"}
             variant="accent"
+            size="sm"
           />
         </div>
 
-        <div className="mt-4">
-          <PageTabs pages={pages} activeSlug={active.slug} basePath="/today" />
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-line/70 py-2.5 text-[12px] text-ink-soft">
-          <span className="flex items-center gap-1.5">
-            <span className="num font-[640] text-ink">{bn(readyCount)}</span> রেডি
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="num font-[640] text-ink">{bn(remaining)}</span> ক্যাপশন বাকি
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="num font-[640] text-ink">{bn(stats.fresh)}</span> প্রোডাক্ট অপেক্ষায়
-          </span>
-          {demoMode ? <Badge tone="sky">ডেমো মোড</Badge> : null}
-        </div>
+        <PageTabs pages={pages} activeSlug={active.slug} basePath="/today" className="py-0" />
       </header>
 
       {tasks.length === 0 ? (

@@ -121,22 +121,22 @@ export function AppShell({
       </aside>
 
       <div className="flex min-h-dvh flex-col">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line/70 bg-paper/85 px-4 py-3 backdrop-blur-md lg:hidden">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-line/70 bg-paper/90 px-3 py-2 backdrop-blur-md lg:hidden">
           <Brand />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <QuickSearch />
             <Link
               href="/settings"
-            aria-label="সেটিংস"
-            className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-line bg-card text-ink-soft"
+              aria-label="সেটিংস"
+              className="flex h-8.5 w-8.5 items-center justify-center rounded-[10px] border border-line bg-card text-ink-soft"
             >
-              <IconSettings size={17} />
+              <IconSettings size={16} />
             </Link>
           </div>
         </header>
 
-        <main className="flex-1 px-4 pb-28 pt-5 sm:px-6 lg:px-10 lg:pb-16 lg:pt-9">
-          <div className="mx-auto w-full max-w-[1120px]">{children}</div>
+        <main className="flex-1 px-2.5 pb-24 pt-2.5 sm:px-5 sm:pt-4 lg:px-8 lg:pb-14 lg:pt-7">
+          <div className="mx-auto w-full max-w-[1160px]">{children}</div>
         </main>
 
         <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden">

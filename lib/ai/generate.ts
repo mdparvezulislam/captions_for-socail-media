@@ -419,11 +419,11 @@ function cleanFeatureSnippet(text: string): string {
     .trim();
   if (!clean) return "";
   const firstSentence = clean.split(/[।!?]/)[0]?.trim() ?? clean;
-  const pick = firstSentence.length >= 14 && firstSentence.length <= 105 ? firstSentence : clean;
-  if (pick.length <= 105) return `${pick.replace(/[।.]+$/, "")}।`;
-  const cut = pick.slice(0, 102);
+  const pick = firstSentence.length >= 14 && firstSentence.length <= 185 ? firstSentence : clean;
+  if (pick.length <= 185) return `${pick.replace(/[।.]+$/, "")}।`;
+  const cut = pick.slice(0, 180);
   const lastSpace = cut.lastIndexOf(" ");
-  return `${(lastSpace > 36 ? cut.slice(0, lastSpace) : cut).replace(/[,،:;-]+$/, "").trim()}।`;
+  return `${(lastSpace > 40 ? cut.slice(0, lastSpace) : cut).replace(/[,،:;-]+$/, "").trim()}।`;
 }
 
 function fallbackWhatsApp(_page: Page, product: Product): string {
@@ -431,7 +431,7 @@ function fallbackWhatsApp(_page: Page, product: Product): string {
   const featureHighlights = product.features
     .map((f) => cleanFeatureSnippet(f))
     .filter((line) => line.length >= 10)
-    .slice(0, 3);
+    .slice(0, 2);
 
   const summaryBlock =
     featureHighlights.length > 0
@@ -525,8 +525,15 @@ export async function generateWhatsAppMessage(input: {
 }
 
 function priceMismatch(message: string, product: Product): boolean {
+  const savings =
+    product.compareAtPriceBdt && product.compareAtPriceBdt > product.priceBdt
+      ? product.compareAtPriceBdt - product.priceBdt
+      : -1;
+  // পণ্যের আসল দাম, আগের দাম, ছাড়ের পরিমাণ এবং সাধারণ ডেলিভারি চার্জ (৳৬০/৳১২০) অনুমোদিত
   const allowed = new Set(
-    [product.priceBdt, product.compareAtPriceBdt ?? -1].filter((value) => value > 0).map(String),
+    [product.priceBdt, product.compareAtPriceBdt ?? -1, savings, 60, 70, 80, 100, 110, 120, 130, 150]
+      .filter((value) => value > 0)
+      .map(String),
   );
   const matches = message.match(/৳\s*([০-৯0-9][০-৯0-9,]*)/g) ?? [];
   for (const match of matches) {

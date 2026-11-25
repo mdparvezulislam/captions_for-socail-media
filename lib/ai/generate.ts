@@ -98,6 +98,17 @@ export function structureForType(text: string, type: CaptionType): string {
     return text
       .replace(/([^\n])\n(✅)/g, "$1\n\n$2")
       .replace(/\n{3,}/g, "\n\n")
+      .split("\n")
+      .flatMap((line) => {
+        // লম্বা প্যারাগ্রাফের শেষ CTA বাক্যটা আলাদা লাইনে
+        if (line.length > 240) {
+          const index = line.lastIndexOf("। ");
+          if (index > 60) return [line.slice(0, index + 1).trim(), "", line.slice(index + 2).trim()];
+        }
+        return [line];
+      })
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
       .trim();
   }
   return text;

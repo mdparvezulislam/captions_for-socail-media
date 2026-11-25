@@ -15,8 +15,9 @@
 
 **এই সিস্টেম যা করে (বর্তমান অবস্থা):**
 1. প্রতিদিন সকাল ৭টায় (ঢাকা) cron worker → `POST /api/jobs/daily` (Bearer `INTERNAL_JOB_TOKEN`) → প্রথমে `https://uniquestorebd.top/api/v1/products` থেকে লাইভ ক্যাটালগ সিঙ্ক (delta by `updatedAt`, missing → soft-delete) → তারপর প্রতি পেজে টপ ৫ প্রোডাক্ট নির্বাচন (score: freshness 30/offer 20/cooldown 20/stock 15/perf 10/boost 5; repeat-gap মানে; category cap 2)।
-2. প্রতি প্রোডাক্টে **এক LLM কলে** structured JSON: `image_caption`, `video_caption{hook,body,cta}`, `problem_caption`, `comment_keyword`, `hashtags`, `poster{headline,subline,badge,cta}`। thinkingConfig budget 0 (JSON truncation এড়াতে)।
-3. Validation pipeline: word-count, Bangla ratio ≥0.55, banned claims regex, price-mismatch (৳ + বাংলা অঙ্ক), trigram similarity ≥0.75 → fail হলে safe demo fallback।
+2. প্রতি প্রোডাক্টে **প্রতি ধরনে আলাদা LLM কল** (v3, §23) — এক কলে তিনটা লিখলে ছাঁচে পড়ে। structured JSON: `image_caption`, `video_caption{hook,body,cta}`, `problem_caption`, `comment_keyword`, `hashtags`, `poster{headline,subline,badge,cta}`। thinkingConfig budget 0 (JSON truncation এড়াতে)।
+3. Cross-caption যাচাই: লাইন-ওভারল্যাপ/একই শুরু/একই CTA/similarity ≥ 0.55 হলে sibling লাইন নিষিদ্ধ করে রিলিখন; ক্লিশে ও হুবহু-ফিচার-কপি ডিটেকশন; thinking বাজেট image 768/video 192/problem 1024।
+4. Validation pipeline: word-count, Bangla ratio ≥0.55, banned claims regex, price-mismatch (৳ + বাংলা অঙ্ক), trigram similarity ≥0.75 → fail হলে safe demo fallback।
 4. Gold caption format (moderator-approved): সমস্যা-লাইন → `✅ English Label - বাংলা সুবিধা` বুলেট → `কমেন্টে 'Keyword' লিখুন। দাম আর অর্ডার লিংক ইনবক্সে দিয়ে দিচ্ছি।` — দাম বডিতে নয় (ইনবক্স কৌশল)।
 5. Copy formatting: **Unicode Mathematical Sans-Serif Bold** (U+1D5EC range) — English রান বোল্ড হয়, বাংলা/ইমোজি/হ্যাশট্যাগ লাইন অস্পৃশ্য; গ্রুপ মোডে + 🛒 অর্ডার লিংক / 📞 হটলাইন / 🚚 ডেলিভারি / 🛡️ ওয়ারেন্টি ব্লক।
 6. UI: মোবাইল-ফার্স্ট টাস্ক গ্রিড (`/today`) → ক্লিকে ইনস্ট্যান্ট ড্রয়ার (`/api/studio/[id]` JSON, রিলোড নেই) → ৩ ক্যাপশন কার্ড (কপি/এডিট/রিরাইট/পোস্ট-মার্ক) → পোস্টার স্টুডিও (`/poster/[id]`, Canvas PNG 1080px, বাংলা ফন্ট Anek Bangla, ব্র্যান্ড কিট পার-পেজ)। Ctrl+K সার্চ, ←/→ নেভিগেশন, Esc।

@@ -411,24 +411,47 @@ export interface WhatsAppOutcome {
   issues: string[];
 }
 
+function cleanFeatureSnippet(text: string): string {
+  const clean = text
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "")
+    .replace(/^[-–—•*:\s]+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!clean) return "";
+  const firstSentence = clean.split(/[।!?]/)[0]?.trim() ?? clean;
+  const pick = firstSentence.length >= 14 && firstSentence.length <= 105 ? firstSentence : clean;
+  if (pick.length <= 105) return `${pick.replace(/[।.]+$/, "")}।`;
+  const cut = pick.slice(0, 102);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 36 ? cut.slice(0, lastSpace) : cut).replace(/[,،:;-]+$/, "").trim()}।`;
+}
+
 function fallbackWhatsApp(_page: Page, product: Product): string {
   const name = englishName(product);
-  const benefit = (product.solutionBn || product.features[0] || "").replace(/\s+/g, " ").trim().slice(0, 120);
+  const featureHighlights = product.features
+    .map((f) => cleanFeatureSnippet(f))
+    .filter((line) => line.length >= 10)
+    .slice(0, 3);
+
+  const summaryBlock =
+    featureHighlights.length > 0
+      ? [
+          `${name}-এর মূল সুবিধাগুলো:`,
+          ...featureHighlights.map((line) => `- ${line}`),
+        ].join("\n")
+      : `${name} — ${cleanFeatureSnippet(product.solutionBn || "দৈনন্দিন ব্যবহারের জন্য মানসম্মত পণ্য")}`;
+
   const detailLines = [
-    `💰 দাম: ${taka(product.priceBdt)}${product.compareAtPriceBdt ? ` (আগে ${taka(product.compareAtPriceBdt)})` : ""}`,
-    "🚚 ডেলিভারি: ঢাকায় ৳৬০, ঢাকার বাইরে ৳১২০ (ক্যাশ অন ডেলিভারি)",
-    product.enrich?.warranty ? `🛡️ ওয়ারেন্টি: ${product.enrich.warranty}` : null,
+    `দাম: ${taka(product.priceBdt)}${product.compareAtPriceBdt ? ` (আগে ${taka(product.compareAtPriceBdt)})` : ""}`,
+    "ডেলিভারি: ঢাকায় ৳৬০, ঢাকার বাইরে ৳১২০ (ক্যাশ অন ডেলিভারি)",
+    product.enrich?.warranty ? `ওয়ারেন্টি: ${product.enrich.warranty}` : null,
   ].filter((line): line is string => Boolean(line));
 
-  const blocks = [
-    "আসসালামু আলাইকুম! 😊\nনক করার জন্য ধন্যবাদ।",
-    benefit ? `${name} — ${benefit}` : `${name} এখন স্টকে আছে।`,
-    detailLines.join("\n"),
-    "অর্ডার করতে আপনার নাম, মোবাইল নম্বর ও ঠিকানা দিন।",
-    product.enrich?.orderUrl ? `🔗 ${product.enrich.orderUrl}` : null,
-  ].filter((block): block is string => Boolean(block));
+  const ctaBlock = product.enrich?.orderUrl
+    ? `অর্ডার করতে আপনার নাম, মোবাইল নম্বর ও ঠিকানা দিন, অথবা সরাসরি ওয়েবসাইট থেকে অর্ডার করতে পারেন:\n${product.enrich.orderUrl}`
+    : "অর্ডার করতে আপনার নাম, মোবাইল নম্বর ও ঠিকানা দিন।";
 
-  return blocks.join("\n\n");
+  return ["আসসালামু আলাইকুম!", summaryBlock, detailLines.join("\n"), ctaBlock].join("\n\n");
 }
 
 export async function generateWhatsAppMessage(input: {
@@ -475,7 +498,7 @@ export async function generateWhatsAppMessage(input: {
       message = message.replace(/^[✅#\s]+/, "").trim();
     }
     if (product.enrich?.orderUrl && !message.includes(product.enrich.orderUrl)) {
-      message = `${message}\n\n🔗 ${product.enrich.orderUrl}`;
+      message = `${message}\n\n${product.enrich.orderUrl}`;
     }
     if (/৳\s*[০-৯0-9]/.test(message) && priceMismatch(message, product)) {
       issues.push("দামের তথ্য মেলেনি — সংশোধন করা হচ্ছে");

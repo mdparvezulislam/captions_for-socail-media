@@ -175,96 +175,99 @@ export function groupOrderBlock(input: GroupBlockInput): string {
 
 /**
  * WhatsApp / ইনবক্স রিপ্লাই ফরম্যাটার:
- * - শুরুতে অবশ্যই "আসসালামু আলাইকুম!" থাকবে
- * - একটানা লম্বা প্যারাগ্রাফ ভেঙে পরিষ্কার গ্যাপ ও ছোট ছোট ব্লকে সাজাবে যাতে গ্রাহক সহজেই পড়তে পারে
- * - অর্ডার লিংক সবসময় আলাদা লাইনে নিচে থাকবে
+ * - কোনো AI-ধাঁচের ইমোজি বা আইকন (😊, 💰, 🚚, 🛡️, 🔗, ✅) রাখবে না
+ * - শুরুতে শুধু "আসসালামু আলাইকুম!" থাকবে ("নক করার জন্য ধন্যবাদ" বাদ)
+ * - পণ্যের মূল ফিচার, দাম/ডেলিভারি ও অর্ডার নির্দেশনা পরিষ্কার গ্যাপ দিয়ে সাজাবে
+ * - অর্ডার CTA-এর সাথে ওয়েবসাইট লিংক সুন্দরভাবে নিচে থাকবে
  */
 export function formatWhatsAppReply(raw: string): string {
   const normalized = raw
     .replace(/\\r\\n/g, "\n")
     .replace(/\\n/g, "\n")
     .replace(/\r/g, "")
+    // সব ইমোজি ও আইকন পরিষ্কার করা
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, "")
     .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   if (!normalized) return "";
 
   const greetingRegex = /^আসসালামু\s*আলাইকুম[!।,\s]*/u;
+  const thanksLineRegex = /^(?:জি[,،\s]*)?(?:আমাদের\s*)?(?:নক\s*করার\s*জন্য\s*ধন্যবাদ|ধন্যবাদ(?:\s*আমাদের)?\s*নক\s*করার\s*জন্য|মেসেজ\s*(?:দেওয়ার|করার)\s*জন্য\s*ধন্যবাদ|ইনবক্স\s*করার\s*জন্য\s*ধন্যবাদ|ধন্যবাদ\s*ভাইয়া\/আপু)[!।,\s]*/u;
 
-  // ইতিমধ্যে ভালোভাবে ফাঁকা লাইন (\n\n) দিয়ে সাজানো থাকলে শুধু সালাম ও লিংক নিশ্চিত করি
-  if ((normalized.match(/\n\n/g) ?? []).length >= 2) {
-    let text = normalized;
-    if (!greetingRegex.test(text)) {
-      text = `আসসালামু আলাইকুম!\n${text}`;
-    } else {
-      text = text.replace(/^আসসালামু\s*আলাইকুম[!।,]?\s+/u, "আসসালামু আলাইকুম!\n");
-    }
-    // প্যারাগ্রাফের ভেতরে লেগে থাকা লিংক আলাদা লাইনে নামানো
-    text = text.replace(
-      /[ \t]*(?:বিস্তারিত(?:\s+এখানে)?\s+দেখুন\s*[:ঃ]?\s*|লিংক\s*[:ঃ]?\s*)?(?:🔗\s*)?(https?:\/\/\S+)/gi,
-      "\n\n🔗 $1",
-    );
-    return text.replace(/\n{3,}/g, "\n\n").trim();
-  }
-
-  // একটানা প্যারাগ্রাফ — লিংক আলাদা করে বাক্যগুলো সুন্দর ব্লকে ভাগ করি
-  let working = normalized.replace(/\n+/g, " ").replace(/\s{2,}/g, " ").trim();
-  let urlLine: string | null = null;
-  const urlMatch = working.match(
-    /(?:বিস্তারিত(?:\s+এখানে)?\s+দেখুন\s*[:ঃ]?\s*|অর্ডার\s+লিংক\s*[:ঃ]?\s*|লিংক\s*[:ঃ]?\s*)?(?:🔗\s*)?(https?:\/\/\S+)/i,
+  // URL আলাদা করে নিই যাতে শেষের অর্ডার ব্লকে সুন্দরভাবে বসানো যায়
+  let cleanUrl: string | null = null;
+  let withoutUrl = normalized.replace(
+    /(?:বিস্তারিত(?:\s+এখানে)?\s+দেখুন\s*[:ঃ]?\s*|অর্ডার\s+লিংক\s*[:ঃ]?\s*|লিংক\s*[:ঃ]?\s*|ওয়েবসাইট\s*লিংক\s*[:ঃ]?\s*)?(https?:\/\/\S+)/gi,
+    (_m, url: string) => {
+      if (!cleanUrl) cleanUrl = url.replace(/[.,;!?]+$/, "");
+      return "";
+    },
   );
-  if (urlMatch) {
-    const cleanUrl = urlMatch[1].replace(/[.,;!?]+$/, "");
-    urlLine = `🔗 ${cleanUrl}`;
-    working = working.replace(urlMatch[0], "").trim();
+
+  // ইতিমধ্যে ভালোভাবে ফাঁকা লাইন (\n\n) দিয়ে সাজানো থাকলে ধন্যবাদ-লাইন ও পুরনো CTA পরিষ্কার করে ফরম্যাট করি
+  const rawParagraphs = withoutUrl
+    .split(/\n{2,}/)
+    .map((block) =>
+      block
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => line.replace(thanksLineRegex, "").trim())
+        .filter((line) => line.length > 0 && !/^আসসালামু\s*আলাইকুম[!।,\s]*$/u.test(line))
+        .map((line) => line.replace(greetingRegex, "").trim())
+        .filter(Boolean)
+        .join("\n"),
+    )
+    .filter(Boolean);
+
+  const hasStructuredBlocks = (normalized.match(/\n\n/g) ?? []).length >= 2 && rawParagraphs.length >= 2;
+
+  const orderCtaWithUrl = cleanUrl
+    ? `অর্ডার করতে আপনার নাম, মোবাইল নম্বর ও ঠিকানা দিন, অথবা সরাসরি ওয়েবসাইট থেকে অর্ডার করতে পারেন:\n${cleanUrl}`
+    : "অর্ডার করতে আপনার নাম, মোবাইল নম্বর ও ঠিকানা দিন।";
+
+  if (hasStructuredBlocks) {
+    const kept = rawParagraphs.filter(
+      (block) => !/^(?:অর্ডার\s*(?:করতে|কনফার্ম)|সরাসরি\s*ওয়েবসাইট|বিস্তারিত\s*দেখুন)/u.test(block),
+    );
+    const blocks = ["আসসালামু আলাইকুম!", ...kept, orderCtaWithUrl].filter(Boolean);
+    return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
   }
 
-  // শেষে ঝুলে থাকা ইমোজি (যেমন 😊) ধরে রাখা
-  const trailingEmojiMatch = working.match(/\s*([\u{1F300}-\u{1FAFF}]+)$/u);
-  const trailingEmoji = trailingEmojiMatch ? trailingEmojiMatch[1] : "";
-  if (trailingEmojiMatch) {
-    working = working.slice(0, trailingEmojiMatch.index).trim();
-  }
-
-  const hasGreeting = greetingRegex.test(working);
-  if (hasGreeting) {
-    working = working.replace(greetingRegex, "").trim();
-  }
+  // একটানা প্যারাগ্রাফ — বাক্যগুলো পরিষ্কার ব্লকে ভাগ করি
+  let working = withoutUrl
+    .replace(/\n+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(greetingRegex, "")
+    .replace(thanksLineRegex, "")
+    .trim();
 
   const sentences = working
     .split(/(?<=[।!?])\s+/)
-    .map((s) => s.trim())
+    .map((s) => s.replace(thanksLineRegex, "").trim())
     .filter(Boolean);
 
-  const greetingExtras: string[] = [];
-  const benefitLines: string[] = [];
+  const featureLines: string[] = [];
   const detailLines: string[] = [];
-  const ctaLines: string[] = [];
 
-  for (let i = 0; i < sentences.length; i++) {
-    const s = sentences[i];
-    if (i === 0 && /^(জি[,،\s]|ধন্যবাদ|হ্যালো|হাই)/u.test(s) && s.length <= 75) {
-      greetingExtras.push(s.replace(/^জি[,،\s]+/u, "").trim());
-    } else if (/(অর্ডার\s*করতে|অর্ডার\s*কনফার্ম|নাম[,،\s]*মোবাইল|ঠিকানা\s*(দিন|পাঠান|লিখুন))/u.test(s)) {
-      ctaLines.push(s);
-    } else if (/(দাম|৳|টাকা|ডিসকাউন্ট|ছা[ড়র]|ডেলিভারি|ওয়ারেন্টি|ওয়ারেন্টি)/u.test(s)) {
+  for (const s of sentences) {
+    if (/(অর্ডার\s*করতে|অর্ডার\s*কনফার্ম|নাম[,،\s]*মোবাইল|ঠিকানা\s*(দিন|পাঠান|লিখুন)|ওয়েবসাইট\s*থেকে)/u.test(s)) {
+      continue;
+    }
+    if (/(দাম|৳|টাকা|ডিসকাউন্ট|ছা[ড়র]|ডেলিভারি|ওয়ারেন্টি|ওয়ারেন্টি)/u.test(s)) {
       detailLines.push(s);
     } else {
-      benefitLines.push(s);
+      featureLines.push(s);
     }
   }
 
-  const greetingBlock =
-    greetingExtras.length > 0
-      ? `আসসালামু আলাইকুম!${trailingEmoji ? ` ${trailingEmoji}` : ""}\n${greetingExtras.join(" ")}`
-      : `আসসালামু আলাইকুম!${trailingEmoji ? ` ${trailingEmoji}` : ""}`;
-
   const blocks = [
-    greetingBlock,
-    benefitLines.join(" "),
+    "আসসালামু আলাইকুম!",
+    featureLines.join(" "),
     detailLines.join("\n"),
-    ctaLines.join(" "),
-    urlLine ?? "",
+    orderCtaWithUrl,
   ].filter(Boolean);
 
   return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();

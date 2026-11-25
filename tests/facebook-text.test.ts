@@ -74,23 +74,30 @@ describe("deriveKeyword", () => {
 });
 
 describe("formatWhatsAppReply", () => {
-  it("prepends আসসালামু আলাইকুম! and splits a dense paragraph into breathable spaced blocks", () => {
+  it("starts with আসসালামু আলাইকুম!, strips emojis and thank-you filler, and adds website order CTA", () => {
     const raw =
       "জি, ধন্যবাদ আমাদের নক করার জন্য। আপনার সোনামণির জন্য Intelligence Talking Book-টি খুবই কার্যকর, কারণ এটি খেলার ছলে বাংলা, ইংরেজি ও আরবি ভাষার শব্দ শেখাতে সাহায্য করে। এখন ডিসকাউন্টে দাম পড়ছে ১,১২০ টাকা এবং পাচ্ছেন এক বছরের ওয়ারেন্টি। অর্ডার করতে আপনার নাম, মোবাইল নম্বর ও ঠিকানা দিন। বিস্তারিত এখানে দেখুন: https://uniquestorebd.top/product/intelligence-talking-book 😊";
     const formatted = formatWhatsAppReply(raw);
-    expect(formatted.startsWith("আসসালামু আলাইকুম!")).toBe(true);
-    expect(formatted).toContain("\n\n");
-    expect(formatted).toContain("🔗 https://uniquestorebd.top/product/intelligence-talking-book");
-    const blocks = formatted.split("\n\n");
-    expect(blocks.length).toBeGreaterThanOrEqual(4);
-    expect(blocks[blocks.length - 1]).toBe("🔗 https://uniquestorebd.top/product/intelligence-talking-book");
+    expect(formatted.startsWith("আসসালামু আলাইকুম!\n\n")).toBe(true);
+    expect(formatted).not.toContain("নক করার জন্য ধন্যবাদ");
+    expect(formatted).not.toContain("ধন্যবাদ আমাদের নক করার জন্য");
+    expect(formatted).not.toMatch(/[\p{Extended_Pictographic}]/u);
+    expect(formatted).toContain(
+      "অর্ডার করতে আপনার নাম, মোবাইল নম্বর ও ঠিকানা দিন, অথবা সরাসরি ওয়েবসাইট থেকে অর্ডার করতে পারেন:\nhttps://uniquestorebd.top/product/intelligence-talking-book",
+    );
+    expect(formatted.split("\n\n")).toHaveLength(4);
   });
 
-  it("preserves already spaced replies while guaranteeing the greeting at top", () => {
+  it("strips AI emojis and thank-you line from already structured replies", () => {
     const raw =
-      "আসসালামু আলাইকুম! 😊\nনক করার জন্য ধন্যবাদ।\n\nএটি খুব কাজের একটি গ্যাজেট।\n\n💰 দাম: ৳১,১২০\n\n🔗 https://uniquestorebd.top/product/test";
+      "আসসালামু আলাইকুম!\n😊\nনক করার জন্য ধন্যবাদ।\n\n3D LED Clock আপনার ঘরের লুক বদলে দেবে।\n\n💰 দাম: ৳৭৭০\n🚚 ডেলিভারি: ঢাকায় ৳৬০\n🛡️ ওয়ারেন্টি: 7 Days\n\nঅর্ডার করতে আপনার নাম, মোবাইল নম্বর ও ঠিকানা দিন।\n\n🔗 https://uniquestorebd.top/product/3d-led-clock";
     const formatted = formatWhatsAppReply(raw);
-    expect(formatted.startsWith("আসসালামু আলাইকুম!")).toBe(true);
-    expect(formatted.split("\n\n")).toHaveLength(4);
+    expect(formatted.startsWith("আসসালামু আলাইকুম!\n\n")).toBe(true);
+    expect(formatted).not.toContain("নক করার জন্য ধন্যবাদ");
+    expect(formatted).not.toMatch(/[\p{Extended_Pictographic}]/u);
+    expect(formatted).toContain("দাম: ৳৭৭০\nডেলিভারি: ঢাকায় ৳৬০\nওয়ারেন্টি: 7 Days");
+    expect(formatted).toContain(
+      "অর্ডার করতে আপনার নাম, মোবাইল নম্বর ও ঠিকানা দিন, অথবা সরাসরি ওয়েবসাইট থেকে অর্ডার করতে পারেন:\nhttps://uniquestorebd.top/product/3d-led-clock",
+    );
   });
 });

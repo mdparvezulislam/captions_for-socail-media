@@ -89,42 +89,43 @@ export function BulkGenerate({ pageSlug }: { pageSlug: string }) {
   const percent = total && total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
-    <div className="flex flex-col items-end gap-1.5">
-      <div className="flex flex-wrap items-center justify-end gap-2">
+    <div className="flex flex-col items-start gap-1 sm:items-end">
+      <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
         <Button
           variant={finished ? "moss" : "primary"}
-          icon={<IconSpark size={15} className={running ? "animate-pulse" : ""} />}
+          size="sm"
+          icon={<IconSpark size={13} className={running ? "animate-pulse" : ""} />}
           onClick={() => run(false)}
           disabled={running}
         >
-          {running ? `তৈরি হচ্ছে… ${bn(done)}/${bn(total ?? 0)}` : "সব প্রোডাক্টের ক্যাপশন তৈরি করুন"}
+          {running ? `তৈরি হচ্ছে… ${bn(done)}/${bn(total ?? 0)}` : "সব ক্যাপশন তৈরি"}
         </Button>
         <Button
           variant="quiet"
           size="sm"
-          icon={<IconRefresh size={14} className={running ? "animate-spin" : ""} />}
+          icon={<IconRefresh size={13} className={running ? "animate-spin" : ""} />}
           onClick={() => run(true)}
           disabled={running}
         >
-          নতুন করে সবার
+          নতুন করে
         </Button>
       </div>
 
       {total ? (
-        <div className="w-full max-w-[280px]">
+        <div className="w-full max-w-[260px]">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-paper-deep">
             <div
               className="h-full rounded-full bg-moss transition-[width] duration-500"
               style={{ width: `${percent}%` }}
             />
           </div>
-          <p className="mt-1 text-right text-[10.5px] text-ink-faint">
+          <p className="mt-1 text-left text-[10.5px] text-ink-faint sm:text-right">
             {bn(done)}/{bn(total)} · {bn(percent)}%
           </p>
         </div>
       ) : null}
 
-      {message ? <span className="max-w-[320px] text-right text-[11.5px] text-ink-soft">{message}</span> : null}
+      {message ? <span className="max-w-[320px] text-left text-[11.5px] text-ink-soft sm:text-right">{message}</span> : null}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { captionCopyText, deriveKeyword, formatForFacebook, toBold } from "@/lib/facebook-text";
+import { captionCopyText, deriveKeyword, formatForFacebook, formatWhatsAppReply, toBold } from "@/lib/facebook-text";
 
 describe("toBold", () => {
   it("maps Latin letters and digits to mathematical bold", () => {
@@ -70,5 +70,27 @@ describe("deriveKeyword", () => {
   it("falls back to a category map", () => {
     expect(deriveKeyword("রিচার্জেবল মিনি ফ্যান", "ফ্যান")).toBe("Fan");
     expect(deriveKeyword("কিছু নাম", "অজানা")).toBe("অর্ডার");
+  });
+});
+
+describe("formatWhatsAppReply", () => {
+  it("prepends আসসালামু আলাইকুম! and splits a dense paragraph into breathable spaced blocks", () => {
+    const raw =
+      "জি, ধন্যবাদ আমাদের নক করার জন্য। আপনার সোনামণির জন্য Intelligence Talking Book-টি খুবই কার্যকর, কারণ এটি খেলার ছলে বাংলা, ইংরেজি ও আরবি ভাষার শব্দ শেখাতে সাহায্য করে। এখন ডিসকাউন্টে দাম পড়ছে ১,১২০ টাকা এবং পাচ্ছেন এক বছরের ওয়ারেন্টি। অর্ডার করতে আপনার নাম, মোবাইল নম্বর ও ঠিকানা দিন। বিস্তারিত এখানে দেখুন: https://uniquestorebd.top/product/intelligence-talking-book 😊";
+    const formatted = formatWhatsAppReply(raw);
+    expect(formatted.startsWith("আসসালামু আলাইকুম!")).toBe(true);
+    expect(formatted).toContain("\n\n");
+    expect(formatted).toContain("🔗 https://uniquestorebd.top/product/intelligence-talking-book");
+    const blocks = formatted.split("\n\n");
+    expect(blocks.length).toBeGreaterThanOrEqual(4);
+    expect(blocks[blocks.length - 1]).toBe("🔗 https://uniquestorebd.top/product/intelligence-talking-book");
+  });
+
+  it("preserves already spaced replies while guaranteeing the greeting at top", () => {
+    const raw =
+      "আসসালামু আলাইকুম! 😊\nনক করার জন্য ধন্যবাদ।\n\nএটি খুব কাজের একটি গ্যাজেট।\n\n💰 দাম: ৳১,১২০\n\n🔗 https://uniquestorebd.top/product/test";
+    const formatted = formatWhatsAppReply(raw);
+    expect(formatted.startsWith("আসসালামু আলাইকুম!")).toBe(true);
+    expect(formatted.split("\n\n")).toHaveLength(4);
   });
 });

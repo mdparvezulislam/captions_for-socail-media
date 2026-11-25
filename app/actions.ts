@@ -229,7 +229,9 @@ export async function updateMemberRoleAction(memberId: string, role: string): Pr
   return { ok: true };
 }
 
-export async function regenerateWhatsappAction(productId: string): Promise<{ ok: boolean; message?: string }> {
+export async function regenerateWhatsappAction(
+  productId: string,
+): Promise<{ ok: boolean; body?: string; message?: string }> {
   const product = await getProduct(productId);
   if (!product) return { ok: false, message: "প্রোডাক্ট পাওয়া যায়নি" };
   const page = await getPageById(product.pageId);
@@ -237,7 +239,7 @@ export async function regenerateWhatsappAction(productId: string): Promise<{ ok:
   const text = await regenerateWhatsapp(page, product);
   revalidatePath(`/products/${productId}`);
   revalidatePath("/today");
-  return text ? { ok: true } : { ok: false, message: "তৈরি করা যায়নি" };
+  return text ? { ok: true, body: text } : { ok: false, message: "তৈরি করা যায়নি" };
 }
 
 export async function ensurePoolAction(productId: string): Promise<{ ok: boolean; message?: string }> {

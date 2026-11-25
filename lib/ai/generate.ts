@@ -4,6 +4,7 @@ import { buildPrompt } from "@/lib/ai/prompts";
 import { callGemini, DEFAULT_GEMINI_MODEL, GeminiError } from "@/lib/ai/gemini";
 import { crossCheck, validateCaption } from "@/lib/ai/validate";
 import { englishName } from "@/lib/ai/demo";
+import { formatWhatsAppReply } from "@/lib/facebook-text";
 import { taka } from "@/lib/format";
 
 export interface CaptionDraft {
@@ -410,22 +411,24 @@ export interface WhatsAppOutcome {
   issues: string[];
 }
 
-function fallbackWhatsApp(page: Page, product: Product): string {
+function fallbackWhatsApp(_page: Page, product: Product): string {
   const name = englishName(product);
-  const lines = [
-    `ধন্যবাদ! ${name} নিয়ে আপনার আগ্রহের জন্য।`,
-    "",
-    `✅ ${product.features[0] ?? product.solutionBn}`,
-    `✅ ${product.features[1] ?? product.offerText ?? "ক্যাশ অন ডেলিভারি সুবিধা"}`,
-    "",
-    `দাম: ${taka(product.priceBdt)}${product.compareAtPriceBdt ? ` (আগে ${taka(product.compareAtPriceBdt)})` : ""}`,
-    "ডেলিভারি: ঢাকায় ৳৬০ (১–২ দিন), ঢাকার বাইরে ৳১২০ (২–৪ দিন) · ক্যাশ অন ডেলিভারি",
-    product.enrich?.warranty ? `ওয়ারেন্টি: ${product.enrich.warranty}` : "",
-    "",
-    "অর্ডার কনফার্ম করতে নাম, মোবাইল নম্বর ও ঠিকানা পাঠিয়ে দিন।",
-    product.enrich?.orderUrl ? `🔗 ${product.enrich.orderUrl}` : "",
-  ].filter((line) => line !== "");
-  return lines.join("\n");
+  const benefit = (product.solutionBn || product.features[0] || "").replace(/\s+/g, " ").trim().slice(0, 120);
+  const detailLines = [
+    `💰 দাম: ${taka(product.priceBdt)}${product.compareAtPriceBdt ? ` (আগে ${taka(product.compareAtPriceBdt)})` : ""}`,
+    "🚚 ডেলিভারি: ঢাকায় ৳৬০, ঢাকার বাইরে ৳১২০ (ক্যাশ অন ডেলিভারি)",
+    product.enrich?.warranty ? `🛡️ ওয়ারেন্টি: ${product.enrich.warranty}` : null,
+  ].filter((line): line is string => Boolean(line));
+
+  const blocks = [
+    "আসসালামু আলাইকুম! 😊\nনক করার জন্য ধন্যবাদ।",
+    benefit ? `${name} — ${benefit}` : `${name} এখন স্টকে আছে।`,
+    detailLines.join("\n"),
+    "অর্ডার করতে আপনার নাম, মোবাইল নম্বর ও ঠিকানা দিন।",
+    product.enrich?.orderUrl ? `🔗 ${product.enrich.orderUrl}` : null,
+  ].filter((block): block is string => Boolean(block));
+
+  return blocks.join("\n\n");
 }
 
 export async function generateWhatsAppMessage(input: {
@@ -478,6 +481,7 @@ export async function generateWhatsAppMessage(input: {
       issues.push("দামের তথ্য মেলেনি — সংশোধন করা হচ্ছে");
       message = fallbackWhatsApp(page, product);
     }
+    message = formatWhatsAppReply(message);
 
     return {
       message,

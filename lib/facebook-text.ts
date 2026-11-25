@@ -172,3 +172,100 @@ export function groupOrderBlock(input: GroupBlockInput): string {
   if (input.warranty) parts.push(`🛡️ ${input.warranty}`);
   return parts.join("\n");
 }
+
+/**
+ * WhatsApp / ইনবক্স রিপ্লাই ফরম্যাটার:
+ * - শুরুতে অবশ্যই "আসসালামু আলাইকুম!" থাকবে
+ * - একটানা লম্বা প্যারাগ্রাফ ভেঙে পরিষ্কার গ্যাপ ও ছোট ছোট ব্লকে সাজাবে যাতে গ্রাহক সহজেই পড়তে পারে
+ * - অর্ডার লিংক সবসময় আলাদা লাইনে নিচে থাকবে
+ */
+export function formatWhatsAppReply(raw: string): string {
+  const normalized = raw
+    .replace(/\\r\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (!normalized) return "";
+
+  const greetingRegex = /^আসসালামু\s*আলাইকুম[!।,\s]*/u;
+
+  // ইতিমধ্যে ভালোভাবে ফাঁকা লাইন (\n\n) দিয়ে সাজানো থাকলে শুধু সালাম ও লিংক নিশ্চিত করি
+  if ((normalized.match(/\n\n/g) ?? []).length >= 2) {
+    let text = normalized;
+    if (!greetingRegex.test(text)) {
+      text = `আসসালামু আলাইকুম!\n${text}`;
+    } else {
+      text = text.replace(/^আসসালামু\s*আলাইকুম[!।,]?\s+/u, "আসসালামু আলাইকুম!\n");
+    }
+    // প্যারাগ্রাফের ভেতরে লেগে থাকা লিংক আলাদা লাইনে নামানো
+    text = text.replace(
+      /[ \t]*(?:বিস্তারিত(?:\s+এখানে)?\s+দেখুন\s*[:ঃ]?\s*|লিংক\s*[:ঃ]?\s*)?(?:🔗\s*)?(https?:\/\/\S+)/gi,
+      "\n\n🔗 $1",
+    );
+    return text.replace(/\n{3,}/g, "\n\n").trim();
+  }
+
+  // একটানা প্যারাগ্রাফ — লিংক আলাদা করে বাক্যগুলো সুন্দর ব্লকে ভাগ করি
+  let working = normalized.replace(/\n+/g, " ").replace(/\s{2,}/g, " ").trim();
+  let urlLine: string | null = null;
+  const urlMatch = working.match(
+    /(?:বিস্তারিত(?:\s+এখানে)?\s+দেখুন\s*[:ঃ]?\s*|অর্ডার\s+লিংক\s*[:ঃ]?\s*|লিংক\s*[:ঃ]?\s*)?(?:🔗\s*)?(https?:\/\/\S+)/i,
+  );
+  if (urlMatch) {
+    const cleanUrl = urlMatch[1].replace(/[.,;!?]+$/, "");
+    urlLine = `🔗 ${cleanUrl}`;
+    working = working.replace(urlMatch[0], "").trim();
+  }
+
+  // শেষে ঝুলে থাকা ইমোজি (যেমন 😊) ধরে রাখা
+  const trailingEmojiMatch = working.match(/\s*([\u{1F300}-\u{1FAFF}]+)$/u);
+  const trailingEmoji = trailingEmojiMatch ? trailingEmojiMatch[1] : "";
+  if (trailingEmojiMatch) {
+    working = working.slice(0, trailingEmojiMatch.index).trim();
+  }
+
+  const hasGreeting = greetingRegex.test(working);
+  if (hasGreeting) {
+    working = working.replace(greetingRegex, "").trim();
+  }
+
+  const sentences = working
+    .split(/(?<=[।!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const greetingExtras: string[] = [];
+  const benefitLines: string[] = [];
+  const detailLines: string[] = [];
+  const ctaLines: string[] = [];
+
+  for (let i = 0; i < sentences.length; i++) {
+    const s = sentences[i];
+    if (i === 0 && /^(জি[,،\s]|ধন্যবাদ|হ্যালো|হাই)/u.test(s) && s.length <= 75) {
+      greetingExtras.push(s.replace(/^জি[,،\s]+/u, "").trim());
+    } else if (/(অর্ডার\s*করতে|অর্ডার\s*কনফার্ম|নাম[,،\s]*মোবাইল|ঠিকানা\s*(দিন|পাঠান|লিখুন))/u.test(s)) {
+      ctaLines.push(s);
+    } else if (/(দাম|৳|টাকা|ডিসকাউন্ট|ছা[ড়র]|ডেলিভারি|ওয়ারেন্টি|ওয়ারেন্টি)/u.test(s)) {
+      detailLines.push(s);
+    } else {
+      benefitLines.push(s);
+    }
+  }
+
+  const greetingBlock =
+    greetingExtras.length > 0
+      ? `আসসালামু আলাইকুম!${trailingEmoji ? ` ${trailingEmoji}` : ""}\n${greetingExtras.join(" ")}`
+      : `আসসালামু আলাইকুম!${trailingEmoji ? ` ${trailingEmoji}` : ""}`;
+
+  const blocks = [
+    greetingBlock,
+    benefitLines.join(" "),
+    detailLines.join("\n"),
+    ctaLines.join(" "),
+    urlLine ?? "",
+  ].filter(Boolean);
+
+  return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}

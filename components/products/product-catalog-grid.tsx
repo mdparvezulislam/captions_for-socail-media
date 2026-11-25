@@ -301,7 +301,7 @@ export function ProductCatalogGrid({
                   </div>
 
                   <div className="flex flex-1 flex-col px-2.5 pb-1.5 pt-2">
-                    <p className="line-clamp-2 min-h-[2.3rem] text-[12px] font-[580] leading-[1.35] text-ink">
+                    <p className="line-clamp-2 h-[2.7em] overflow-hidden text-[12px] font-[580] leading-[1.35] text-ink">
                       {product.nameBn}
                     </p>
                     <div className="mt-1 flex flex-wrap items-baseline gap-1.5">

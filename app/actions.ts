@@ -4,7 +4,16 @@ import { revalidatePath } from "next/cache";
 import { syncUniStoreCatalog } from "@/lib/sync";
 import { db, readyDb } from "@/lib/db";
 import { getCaption, getPageById, getPageBySlug, getProduct } from "@/lib/data";
-import { ensureProductCaptions, generateBatch, markPosted, pickBatchProducts, regenerateOne, saveBody } from "@/lib/captions";
+import {
+  ensureProductCaptions,
+  generateBatch,
+  generatePoolForProduct,
+  markPosted,
+  pickBatchProducts,
+  regenerateOne,
+  regenerateWhatsapp,
+  saveBody,
+} from "@/lib/captions";
 import { getSession } from "@/lib/session";
 import type { BrandKit } from "@/lib/types";
 
@@ -218,4 +227,30 @@ export async function updateMemberRoleAction(memberId: string, role: string): Pr
   (await readyDb()).prepare("UPDATE members SET role = ? WHERE id = ?").bind(role, memberId).run();
   revalidatePath("/team");
   return { ok: true };
+}
+
+export async function regenerateWhatsappAction(productId: string): Promise<{ ok: boolean; message?: string }> {
+  const product = await getProduct(productId);
+  if (!product) return { ok: false, message: "প্রোডাক্ট পাওয়া যায়নি" };
+  const page = await getPageById(product.pageId);
+  if (!page) return { ok: false, message: "পেজ পাওয়া যায়নি" };
+  const text = await regenerateWhatsapp(page, product);
+  revalidatePath(`/products/${productId}`);
+  revalidatePath("/today");
+  return text ? { ok: true } : { ok: false, message: "তৈরি করা যায়নি" };
+}
+
+export async function ensurePoolAction(productId: string): Promise<{ ok: boolean; message?: string }> {
+  const product = await getProduct(productId);
+  if (!product) return { ok: false, message: "প্রোডাক্ট পাওয়া যায়নি" };
+  const page = await getPageById(product.pageId);
+  if (!page) return { ok: false, message: "পেজ পাওয়া যায়নি" };
+  try {
+    await generatePoolForProduct(page, product, { force: false });
+    revalidatePath(`/products/${productId}`);
+    revalidatePath("/today");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "ব্যর্থ" };
+  }
 }

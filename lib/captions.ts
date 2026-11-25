@@ -3,7 +3,7 @@ import { db, id, readyDb } from "@/lib/db";
 import { dhakaDate } from "@/lib/format";
 import { getLastUsed, getUsedToday, listProducts, mapCaption } from "@/lib/data";
 import { pickTopProducts } from "@/lib/selection";
-import { generateCaptionDrafts, type CaptionDraft } from "@/lib/ai/generate";
+import { generateCaptionDrafts, generateWhatsAppMessage, type CaptionDraft } from "@/lib/ai/generate";
 import type { Caption, CaptionMeta, CaptionType, Page, Product } from "@/lib/types";
 
 type Row = Record<string, unknown>;
@@ -507,4 +507,155 @@ export function captionTypeLabel(type: CaptionType): string {
 
 export function databaseHandle(): D1Database {
   return db();
+}
+
+// ---------------------------------------------------------------------------
+// লাইব্রেরি পুল — প্রতিটি প্রোডাক্টের রেডি ক্যাপশন আগেই তৈরি করে রাখা
+// (ডেইলি ৫-প্রোডাক্ট রোটেশন আলাদা থাকে, তাই ফিড কখনো খালি হয় না)
+// ---------------------------------------------------------------------------
+
+export interface PoolResult {
+  captions: Caption[];
+  whatsapp: string | null;
+  source: "library" | "daily";
+  generated: boolean;
+}
+
+export async function getLibraryCaptions(pageId: string, productId: string): Promise<Caption[]> {
+  const database = await readyDb();
+  const { results } = await database
+    .prepare("SELECT * FROM caption_library WHERE page_id = ? AND product_id = ?")
+    .bind(pageId, productId)
+    .all<Row>();
+  return (results ?? []).map((row) => ({
+    ...mapCaption({
+      ...row,
+      run_date: dhakaDate(),
+      batch: 0,
+      status: "ready",
+    }),
+  }));
+}
+
+export async function getWhatsappMessage(pageId: string, productId: string): Promise<string | null> {
+  const database = await readyDb();
+  const row = await database
+    .prepare("SELECT body FROM product_messages WHERE page_id = ? AND product_id = ? AND kind = 'whatsapp'")
+    .bind(pageId, productId)
+    .first<{ body: string }>();
+  return row?.body ?? null;
+}
+
+async function saveLibrary(
+  page: Page,
+  product: Product,
+  drafts: CaptionDraft[],
+  model: string,
+): Promise<Caption[]> {
+  const database = await readyDb();
+  const now = new Date().toISOString();
+  await database.batch(
+    drafts.map((draft) =>
+      database
+        .prepare(
+          `INSERT INTO caption_library (id, page_id, product_id, type, body, hashtags_json, meta_json, model, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(page_id, product_id, type) DO UPDATE SET
+             body = excluded.body, hashtags_json = excluded.hashtags_json,
+             meta_json = excluded.meta_json, model = excluded.model, created_at = excluded.created_at`,
+        )
+        .bind(
+          id("lib"),
+          page.id,
+          product.id,
+          draft.type,
+          draft.body,
+          JSON.stringify(draft.hashtags),
+          JSON.stringify(draft.meta),
+          model,
+          now,
+        ),
+    ),
+  );
+  return getLibraryCaptions(page.id, product.id);
+}
+
+async function saveWhatsapp(page: Page, product: Product, body: string, model: string): Promise<void> {
+  const database = await readyDb();
+  await database
+    .prepare(
+      `INSERT INTO product_messages (id, page_id, product_id, kind, body, model, created_at)
+       VALUES (?, ?, ?, 'whatsapp', ?, ?, ?)
+       ON CONFLICT(page_id, product_id, kind) DO UPDATE SET
+         body = excluded.body, model = excluded.model, created_at = excluded.created_at`,
+    )
+    .bind(id("msg"), page.id, product.id, body, model, new Date().toISOString())
+    .run();
+}
+
+/**
+ * একটা প্রোডাক্টের ৩টি ক্যাপশন + WhatsApp রিপ্লাই লাইব্রেরিতে তৈরি/রিফ্রেশ করে।
+ * force=false হলে আগের পুল থাকলে কিছু করে না (দ্রুত)।
+ */
+export async function generatePoolForProduct(
+  page: Page,
+  product: Product,
+  options: { force?: boolean } = {},
+): Promise<PoolResult> {
+  const existing = await getLibraryCaptions(page.id, product.id);
+  const existingWhatsapp = await getWhatsappMessage(page.id, product.id);
+
+  if (!options.force && existing.length >= 3 && existingWhatsapp) {
+    return { captions: existing, whatsapp: existingWhatsapp, source: "library", generated: false };
+  }
+
+  const started = Date.now();
+  const outcome = await generateCaptionDrafts({
+    page,
+    product,
+    avoid: await recentBodies(page.id, 10),
+    apiKey: apiKey(),
+    model: modelName(),
+  });
+
+  const captions = await saveLibrary(page, product, outcome.drafts, outcome.model);
+
+  const whatsappOutcome = await generateWhatsAppMessage({
+    page,
+    product,
+    apiKey: apiKey(),
+    model: modelName(),
+    avoid: outcome.drafts.map((draft) => draft.body),
+  });
+  await saveWhatsapp(page, product, whatsappOutcome.message, whatsappOutcome.model);
+
+  await logGeneration({
+    pageId: page.id,
+    productId: product.id,
+    stage: "library",
+    status: outcome.source === "demo" ? "demo" : "ok",
+    error: [...outcome.issues, ...whatsappOutcome.issues].join(" | ").slice(0, 900) || undefined,
+    latencyMs: Date.now() - started,
+    model: outcome.model,
+    tokens: outcome.tokensIn + outcome.tokensOut + whatsappOutcome.tokensIn + whatsappOutcome.tokensOut,
+  });
+
+  return {
+    captions,
+    whatsapp: whatsappOutcome.message,
+    source: "library",
+    generated: true,
+  };
+}
+
+export async function regenerateWhatsapp(page: Page, product: Product): Promise<string | null> {
+  const outcome = await generateWhatsAppMessage({
+    page,
+    product,
+    apiKey: apiKey(),
+    model: modelName(),
+    avoid: [],
+  });
+  await saveWhatsapp(page, product, outcome.message, outcome.model);
+  return outcome.message;
 }

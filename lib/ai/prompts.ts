@@ -2,11 +2,12 @@ import { bnNumber, taka } from "@/lib/format";
 import type { CaptionType, Page, Product } from "@/lib/types";
 
 export type Angle = "story" | "question" | "confession";
+export type PromptKind = CaptionType | "whatsapp";
 
 export interface PromptInput {
   page: Page;
   product: Product;
-  type: CaptionType;
+  type: PromptKind;
   avoid: string[];
   /** একই প্রোডাক্টের অন্য ক্যাপশন — এগুলোর লাইন পুনরাবৃত্তি করা যাবে না */
   siblingBodies?: string[];
@@ -99,6 +100,17 @@ const TYPE_RULES: Record<CaptionType, string> = {
 ৬. CTA — তৃতীয় ধরনের CTA: অফার/স্টক-কেন্দ্রিক। যেমন «এই দামে স্টক সীমিত — দেরি করলে মিস করবেন।» অথবা «আজকের অফার শেষ হলে দাম বাড়বে।» (অফার থাকলে তবেই)।`,
 };
 
+const WHATSAPP_RULES = `ধরন: WhatsApp/মেসেঞ্জার রিপ্লাই — গ্রাহক কমেন্টে বা ইনবক্সে জিজ্ঞেস করার পর আপনি পাঠাবেন।
+
+নিয়ম:
+১. শুরুতে গ্রাহককে নাম ধরে নয়, কিন্তু আন্তরিকভাবে সম্ভাষণ ("ধন্যবাদ ভাইয়া/আপু, ..." বা "জি, ..." দিয়ে শুরু)।
+২. পণ্যের নাম + ২টি সবচেয়ে কাজের সুবিধা — সংক্ষেপে।
+৩. দাম + অফার (তথ্য থাকলে), ডেলিভারি চার্জ ও সময়, ওয়ারেন্টি — ছোট ছোট লাইনে।
+৪. অর্ডার কনফার্ম করতে যা লাগবে: নাম, মোবাইল, ঠিকানা — ভদ্রভাবে চাইবে।
+৫. পণ্যের লিংক দেবে: {ORDER_URL} (দেওয়া থাকলে; না থাকলে লিংকের কথা বলবে না)।
+৬. মোট ৬০–৯৫ শব্দ, ৪–৬ লাইন। কোনো হ্যাশট্যাগ নয়, কোনো বুলেট ✅ নয়, ইমোজি সর্বোচ্চ ২টি।
+৭. এমনভাবে লিখবে যেন একজন মানুষ দোকানদার নিজ হাতে লিখছে — রোবটিক টেমপ্লেট নয়।`;
+
 const POSTER_RULES = `পোস্টার কপি (ছোট, বড় হরফে পড়ার জন্য):
 - headline: পণ্যের আসল নাম, ২৬ অক্ষরের কম, বড় অক্ষরে ভাব।
 - subline: সবচেয়ে বাস্তব উপকার, ৪০ অক্ষরের কম।
@@ -107,6 +119,49 @@ const POSTER_RULES = `পোস্টার কপি (ছোট, বড় হ�
 
 export function buildPrompt(input: PromptInput): BuiltPrompt {
   const { page, product, type, avoid, siblingBodies = [] } = input;
+
+  const avoidBlock =
+    avoid.length > 0
+      ? `এই ক্যাপশনগুলো আগে ব্যবহার হয়েছে — এগুলোর বাক্য, হুক বা ছন্দ একদম নকল করবে না:\n${avoid
+          .slice(0, 6)
+          .map((body, index) => `${index + 1}) ${body.replace(/\s+/g, " ").slice(0, 300)}`)
+          .join("\n")}`
+      : "";
+
+  const siblingBlock =
+    siblingBodies.length > 0
+      ? `এই পণ্যের জন্য ইতিমধ্যে লেখা হয়েছে (এদের কোনো লাইন, বুলেট, CTA বা হ্যাশট্যাগ তোমার লেখায় থাকতে পারবে না — সম্পূর্ণ ভিন্ন কোণ থেকে লেখো):\n${siblingBodies
+          .map((body, index) => `--- ক্যাপশন ${index + 1} ---\n${body.slice(0, 700)}`)
+          .join("\n")}`
+      : "";
+
+  if (type === "whatsapp") {
+    return {
+      system: SYSTEM,
+      user: `${researchBrief(product, page)}
+
+${WHATSAPP_RULES.replace("{ORDER_URL}", product.enrich?.orderUrl ?? "")}
+
+${avoidBlock}
+
+নিষিদ্ধ বাক্যাংশ:${BANNED_PHRASES}
+
+শুধু JSON ফেরত দাও — {"message": "..."}।`,
+      responseSchema: {
+        type: "OBJECT",
+        properties: {
+          message: {
+            type: "STRING",
+            description: "WhatsApp রিপ্লাই, লাইন ভাঙা \\n দিয়ে, হ্যাশট্যাগ ছাড়া",
+            maxLength: 900,
+          },
+        },
+        required: ["message"],
+        propertyOrdering: ["message"],
+      },
+      promptVersion: "bn-whatsapp-v1",
+    };
+  }
 
   const schema: Record<string, unknown> = {
     type: "OBJECT",
@@ -146,19 +201,6 @@ export function buildPrompt(input: PromptInput): BuiltPrompt {
     };
     (schema.required as string[]).push("poster");
   }
-
-  const avoidBlock = avoid.length > 0
-    ? `এই ক্যাপশনগুলো আগে ব্যবহার হয়েছে — এগুলোর বাক্য, হুক বা ছন্দ একদম নকল করবে না:\n${avoid
-        .slice(0, 6)
-        .map((body, index) => `${index + 1}) ${body.replace(/\s+/g, " ").slice(0, 300)}`)
-        .join("\n")}`
-    : "";
-
-  const siblingBlock = siblingBodies.length > 0
-    ? `এই পণ্যের জন্য ইতিমধ্যে লেখা হয়েছে (এদের কোনো লাইন, বুলেট, CTA বা হ্যাশট্যাগ তোমার লেখায় থাকতে পারবে না — সম্পূর্ণ ভিন্ন কোণ থেকে লেখো):\n${siblingBodies
-        .map((body, index) => `--- ক্যাপশন ${index + 1} ---\n${body.slice(0, 700)}`)
-        .join("\n")}`
-    : "";
 
   const user = `${researchBrief(product, page)}
 

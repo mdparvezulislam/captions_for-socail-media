@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ProductGallery } from "@/components/ui/product-gallery";
 import { PosterStudio } from "@/components/poster/poster-studio";
 import { CaptionCardStack } from "@/components/today/caption-card-stack";
+import { WhatsappCard } from "@/components/today/whatsapp-card";
 import {
   IconArrowUpRight,
   IconCheck,
@@ -308,9 +309,21 @@ export function CaptionWorkspaceDrawer({
                 >
                   <span aria-hidden>‹</span> ক্যাপশন
                 </button>
-                <span className="num rounded-full border border-line bg-card px-3 py-1 text-[11.5px] text-ink-soft">
-                  পণ্য {bn(data.position)} / {bn(data.total)}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="num rounded-full border border-line bg-card px-2.5 py-1 text-[11px] text-ink-soft">
+                    পণ্য {bn(data.position)} / {bn(data.total)}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full border px-2 py-0.5 text-[10px] font-[560]",
+                      data.source === "library"
+                        ? "border-line bg-card-soft text-ink-soft"
+                        : "border-accent/30 bg-accent-soft text-accent-deep",
+                    )}
+                  >
+                    {data.source === "library" ? "সংরক্ষিত" : "আজকের"}
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={onClose}
@@ -463,6 +476,15 @@ export function CaptionWorkspaceDrawer({
                   onSave={save}
                   onMarkPosted={markPosted}
                   pending={pending}
+                />
+              </div>
+
+              {/* WhatsApp রিপ্লাই */}
+              <div className="mt-3">
+                <WhatsappCard
+                  productId={product.id}
+                  initialMessage={data.whatsapp}
+                  productName={product.nameBn}
                 />
               </div>
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageTabs } from "@/components/shell/page-tabs";
 import { SyncButton } from "@/components/products/sync-button";
+import { BulkGenerate } from "@/components/products/bulk-generate";
 import { imageSrcFor } from "@/lib/facebook-text";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty";
@@ -43,7 +44,10 @@ export default async function ProductsPage({
           </div>
           <div className="flex flex-col items-end gap-2">
             <Badge tone="moss">{bn(stats.fresh)}টি অপেক্ষায়</Badge>
-            <SyncButton pageSlug={active.slug} />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <SyncButton pageSlug={active.slug} />
+              <BulkGenerate pageSlug={active.slug} />
+            </div>
           </div>
         </div>
         <div className="mt-4">

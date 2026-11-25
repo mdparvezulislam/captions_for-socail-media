@@ -66,6 +66,35 @@ export const SCHEMA_STATEMENTS: string[] = [
     UNIQUE(page_id, product_id, run_date, type)
   )`,
 
+  // প্রতিটি প্রোডাক্টের রেডি ক্যাপশন পুল — খালি ফিড এড়াতে
+  `CREATE TABLE IF NOT EXISTS caption_library (
+    id TEXT PRIMARY KEY,
+    page_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    body TEXT NOT NULL,
+    hashtags_json TEXT NOT NULL DEFAULT '[]',
+    meta_json TEXT NOT NULL DEFAULT '{}',
+    model TEXT NOT NULL DEFAULT 'gemini',
+    created_at TEXT NOT NULL,
+    UNIQUE(page_id, product_id, type)
+  )`,
+
+  // গ্রাহকের ইনবক্স/কমেন্টের উত্তর — WhatsApp রিপ্লাই
+  `CREATE TABLE IF NOT EXISTS product_messages (
+    id TEXT PRIMARY KEY,
+    page_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'whatsapp',
+    body TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT 'gemini',
+    created_at TEXT NOT NULL,
+    UNIQUE(page_id, product_id, kind)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_library_product ON caption_library(page_id, product_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_messages_product ON product_messages(page_id, product_id)`,
+
   `CREATE TABLE IF NOT EXISTS selection_runs (
     id TEXT PRIMARY KEY,
     page_id TEXT NOT NULL,

@@ -56,6 +56,11 @@ check("drawer pagination tracker", drawerText.includes("পণ্য"));
 console.log("audit: pre-toggle url =", page.url(), "| drawer count =", await page.locator('[data-testid="studio-drawer"]').count());
 const copyButtons = await page.locator('[data-testid="studio-drawer"] button').filter({ hasText: "কপি করুন" }).count();
 check("3 copy buttons in drawer", copyButtons === 3, `count=${copyButtons}`);
+const waCard = await page.locator('[data-testid="studio-drawer"]:has-text("WhatsApp")').count();
+check("WhatsApp reply card in drawer", waCard > 0, `count=${waCard}`);
+const waCopy = await page.locator('[data-testid="studio-drawer"] button:has-text("রিপ্লাই কপি")').count();
+const waEmpty = await page.locator('[data-testid="studio-drawer"]:has-text("WhatsApp রিপ্লাই এখনো তৈরি হয়নি")').count();
+check("WhatsApp card has reply or empty-state CTA", waCopy > 0 || waEmpty > 0, `copy=${waCopy} empty=${waEmpty}`);
 
 // Hashtag toggle + copy text change
 await page.locator('[data-testid="studio-drawer"] label').filter({ hasText: "কপিতে হ্যাশট্যাগ" }).click();
@@ -105,6 +110,10 @@ check("6-column grid on desktop", await dpage.evaluate(() => {
   const grid = document.querySelector('[data-testid="task-grid"]');
   return grid && getComputedStyle(grid).gridTemplateColumns.split(" ").length >= 6;
 }));
+await dpage.goto(`${BASE}/products`, { waitUntil: "networkidle", timeout: 45000 });
+await dpage.waitForTimeout(1500);
+const bulkBtn = await dpage.locator('button:has-text("সব প্রোডাক্টের ক্যাপশন তৈরি করুন")').count();
+check("bulk generate button on products page", bulkBtn > 0);
 await dpage.screenshot({ path: `${OUT}/s19-desktop-grid.png` });
 
 // Ctrl+K search modal (keyboard handler verified separately below)

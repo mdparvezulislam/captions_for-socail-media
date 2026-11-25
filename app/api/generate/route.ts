@@ -1,5 +1,5 @@
-import { env } from "cloudflare:workers";
 import { ensureProductCaptions } from "@/lib/captions";
+import { canRunOps } from "@/lib/ops-auth";
 import { getPageById, getProduct, listProducts } from "@/lib/data";
 
 /**
@@ -8,9 +8,7 @@ import { getPageById, getProduct, listProducts } from "@/lib/data";
  *   { "page": "unique-store-bd", "limit": 5, "onlyNew": true } → ব্যাচ
  */
 export async function POST(request: Request) {
-  const expected = (env as unknown as Record<string, unknown>).INTERNAL_JOB_TOKEN;
-  const authorization = request.headers.get("authorization") ?? "";
-  if (typeof expected === "string" && expected.length > 0 && authorization !== `Bearer ${expected}`) {
+  if (!(await canRunOps(request))) {
     return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 

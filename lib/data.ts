@@ -430,6 +430,9 @@ export interface StudioData {
   product: Product;
   page: Page;
   captions: Caption[];
+  whatsapp: string | null;
+  /** captions কোথা থেকে এসেছে: আজকের ব্যাচ নাকি রেডি লাইব্রেরি */
+  source: "daily" | "library";
   position: number;
   total: number;
   prevId: string | null;
@@ -472,6 +475,36 @@ export async function getStudioData(productId: string, date: string): Promise<St
   ]);
   if (!page) return null;
 
+  let captions = captionRows;
+  let source: "daily" | "library" = "daily";
+  if (captions.length === 0) {
+    const { results: libraryRows } = await (async () => {
+      const database = await readyDb();
+      return database
+        .prepare("SELECT * FROM caption_library WHERE page_id = ? AND product_id = ?")
+        .bind(page.id, productId)
+        .all<Row>();
+    })();
+    if ((libraryRows ?? []).length > 0) {
+      captions = (libraryRows ?? []).map((row) =>
+        mapCaption({ ...row, run_date: date, batch: 0, status: "ready" }),
+      );
+      source = "library";
+    }
+  }
+
+  let whatsapp: string | null = null;
+  try {
+    const database = await readyDb();
+    const message = await database
+      .prepare("SELECT body FROM product_messages WHERE page_id = ? AND product_id = ? AND kind = 'whatsapp'")
+      .bind(page.id, productId)
+      .first<{ body: string }>();
+    whatsapp = message?.body ?? null;
+  } catch {
+    whatsapp = null;
+  }
+
   const index = tasks.findIndex((task) => task.product.id === productId);
   const prevTask = index > 0 ? tasks[index - 1] : null;
   const nextTask = index >= 0 && index < tasks.length - 1 ? tasks[index + 1] : null;
@@ -479,7 +512,9 @@ export async function getStudioData(productId: string, date: string): Promise<St
   return {
     product,
     page,
-    captions: captionRows,
+    captions,
+    whatsapp,
+    source,
     position: index + 1,
     total: tasks.length,
     prevId: prevTask?.product.id ?? null,

@@ -3,6 +3,8 @@ import { demoCaptionSet, demoPosterCopy, commentKeyword } from "@/lib/ai/demo";
 import { buildPrompt } from "@/lib/ai/prompts";
 import { callGemini, DEFAULT_GEMINI_MODEL, GeminiError } from "@/lib/ai/gemini";
 import { crossCheck, validateCaption } from "@/lib/ai/validate";
+import { englishName } from "@/lib/ai/demo";
+import { taka } from "@/lib/format";
 
 export interface CaptionDraft {
   type: CaptionType;
@@ -394,4 +396,117 @@ export async function generateCaptionDrafts(input: GenerateInput): Promise<Gener
     issues,
     latencyMs: Date.now() - started,
   };
+}
+
+// ---------------------------------------------------------------------------
+// WhatsApp / Messenger রিপ্লাই — গ্রাহক ইনবক্সে জিজ্ঞেস করলে কপি করে পাঠানো হবে
+// ---------------------------------------------------------------------------
+
+export interface WhatsAppOutcome {
+  message: string;
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
+  issues: string[];
+}
+
+function fallbackWhatsApp(page: Page, product: Product): string {
+  const name = englishName(product);
+  const lines = [
+    `ধন্যবাদ! ${name} নিয়ে আপনার আগ্রহের জন্য।`,
+    "",
+    `✅ ${product.features[0] ?? product.solutionBn}`,
+    `✅ ${product.features[1] ?? product.offerText ?? "ক্যাশ অন ডেলিভারি সুবিধা"}`,
+    "",
+    `দাম: ${taka(product.priceBdt)}${product.compareAtPriceBdt ? ` (আগে ${taka(product.compareAtPriceBdt)})` : ""}`,
+    "ডেলিভারি: ঢাকায় ৳৬০ (১–২ দিন), ঢাকার বাইরে ৳১২০ (২–৪ দিন) · ক্যাশ অন ডেলিভারি",
+    product.enrich?.warranty ? `ওয়ারেন্টি: ${product.enrich.warranty}` : "",
+    "",
+    "অর্ডার কনফার্ম করতে নাম, মোবাইল নম্বর ও ঠিকানা পাঠিয়ে দিন।",
+    product.enrich?.orderUrl ? `🔗 ${product.enrich.orderUrl}` : "",
+  ].filter((line) => line !== "");
+  return lines.join("\n");
+}
+
+export async function generateWhatsAppMessage(input: {
+  page: Page;
+  product: Product;
+  apiKey?: string;
+  model?: string;
+  avoid?: string[];
+}): Promise<WhatsAppOutcome> {
+  const { page, product } = input;
+  if (!input.apiKey) {
+    return { message: fallbackWhatsApp(page, product), model: "demo", tokensIn: 0, tokensOut: 0, issues: ["API key নেই"] };
+  }
+
+  const prompt = buildPrompt({
+    page,
+    product,
+    type: "whatsapp",
+    avoid: input.avoid ?? [],
+  });
+
+  try {
+    const { response, model } = await callWithFallback(
+      {
+        apiKey: input.apiKey,
+        system: prompt.system,
+        user: prompt.user,
+        schema: prompt.responseSchema,
+        thinkingBudget: 384,
+        timeoutMs: 40_000,
+      },
+      input.model ?? DEFAULT_GEMINI_MODEL,
+    );
+    const json = response.json as Record<string, unknown>;
+    let message = normalizeNewlines(asText(json.message, ""));
+    const issues: string[] = [];
+
+    if (message.split(/\s+/).length < 25) {
+      issues.push("খুব ছোট — ফলব্যাক ব্যবহার");
+      message = fallbackWhatsApp(page, product);
+    }
+    if (/[✅#]/.test(message.split("\n")[0] ?? "")) {
+      issues.push("শুরুতে বুলেট/হ্যাশট্যাগ — সরানো হচ্ছে");
+      message = message.replace(/^[✅#\s]+/, "").trim();
+    }
+    if (product.enrich?.orderUrl && !message.includes(product.enrich.orderUrl)) {
+      message = `${message}\n\n🔗 ${product.enrich.orderUrl}`;
+    }
+    if (/৳\s*[০-৯0-9]/.test(message) && priceMismatch(message, product)) {
+      issues.push("দামের তথ্য মেলেনি — সংশোধন করা হচ্ছে");
+      message = fallbackWhatsApp(page, product);
+    }
+
+    return {
+      message,
+      model,
+      tokensIn: response.tokensIn,
+      tokensOut: response.tokensOut,
+      issues,
+    };
+  } catch (error) {
+    return {
+      message: fallbackWhatsApp(page, product),
+      model: "demo",
+      tokensIn: 0,
+      tokensOut: 0,
+      issues: [error instanceof Error ? error.message.slice(0, 120) : "ব্যর্থ"],
+    };
+  }
+}
+
+function priceMismatch(message: string, product: Product): boolean {
+  const allowed = new Set(
+    [product.priceBdt, product.compareAtPriceBdt ?? -1].filter((value) => value > 0).map(String),
+  );
+  const matches = message.match(/৳\s*([০-৯0-9][০-৯0-9,]*)/g) ?? [];
+  for (const match of matches) {
+    const digits = match
+      .replace(/[০-৯]/g, (digit) => String("০১২৩৪৫৬৭৮৯".indexOf(digit)))
+      .replace(/[^0-9]/g, "");
+    if (digits && !allowed.has(String(Number(digits)))) return true;
+  }
+  return false;
 }
